@@ -1,0 +1,16 @@
+[package]
+name = "gateway"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+axum = { version = "0.7.5", features = ["ws", "multipart"] }
+tokio = { version = "1.38.0", features = ["full"] }
+serde = { version = "1.0.203", features = ["derive"] }
+serde_json = "1.0.120"
+glam = { version = "0.27.0", features = ["serde"] }
+tower-http = { version = "0.5.2", features = ["cors", "fs"] }
+tracing = "0.1.40"
+tracing-subscriber = "0.3.18"
+reqwest = { version = "0.12.5", features = ["json"] }
+uuid = { version = "1.9.1", features = ["v4", "serde"] }
