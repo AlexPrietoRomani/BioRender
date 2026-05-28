@@ -1,0 +1,10 @@
+{
+  "name": "biorender-monorepo",
+  "private": true,
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild",
+      "sharp"
+    ]
+  }
+}

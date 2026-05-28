@@ -1,0 +1,11 @@
+packages:
+  - 'frontend'
+
+pnpm:
+  onlyBuiltDependencies:
+    - esbuild
+    - sharp
+
+allowBuilds:
+  esbuild: true
+  sharp: true

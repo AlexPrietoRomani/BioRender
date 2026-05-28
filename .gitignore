@@ -1,1 +1,153 @@
-*.env
+# ==========================================
+# BioRender Git Ignore Configuration
+# ==========================================
+
+# --- OS Globals ---
+.DS_Store
+Thumbs.db
+desktop.ini
+$RECYCLE.BIN/
+
+# --- Environment & Credentials ---
+.env
+.env.*
+!.env.example
+
+# --- Python / Backend / Services ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+pytest.ini
+.tox/
+.coverage
+.mypy_cache/
+htmlcov/
+build/
+dist/
+*.egg-info/
+.eggs/
+nosetests.xml
+coverage.xml
+*.cover
+pip-log.txt
+pip-delete-this-directory.txt
+
+# BioRender Services virtual environments and caches
+**/venv/
+**/.venv/
+**/env/
+**/.pytest_cache/
+**/.mypy_cache/
+
+# --- Global Web & JS Patterns (Astro & React) ---
+node_modules/
+dist/
+.astro/
+.npm
+.eslintcache
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# --- Rust (Gateway & Asset Assembly) ---
+target/
+debug/
+release/
+*.rs.bk
+*.rlib
+*.rmeta
+
+# --- IDE & Editors ---
+.vscode/
+!.vscode/extensions.json
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+.project
+.settings/
+.classpath
+
+# --- AI Agents & Coding Tools ---
+.agents/
+.claude/
+.opencode/
+.aide/
+.cline/
+.cursor/
+.windsurf/
+.codeium/
+.copilot/
+.continue/
+.promptfoo/
+
+# Agent Documentation & Planning
+CLAUDE.md
+AGENTS.md
+PLAN.md
+Plan.md
+todo.md
+.ignore
+*plan.md
+*scratch*
+skills-lock.json
+
+# --- Data & Databases & Media Volumes ---
+/data/
+!/data/.gitkeep
+**/redis_data/
+**/minio_data/
+*.sqlite3
+*.db
+*.db-journal
+*.sqlite-wal
+*.sqlite-shm
+*.sqlite
+biorender.db
+
+# --- Weights, Checkpoints & Large Models ---
+**/weights/
+**/checkpoints/
+*.onnx
+*.pt
+*.pth
+*.bin
+*.safetensors
+*.mesh
+*.glb
+*.fbx
+*.obj
+*.png
+*.jpg
+*.jpeg
+*.mp4
+*.webm
+*.bvh
+
+# --- Logs & Outputs ---
+*.log
+test_output.txt
+
+# --- Documents & References ---
+docs/process/
+docs/investigation/
+docs/papers/
+docs/doc_guia/
+docs/evaluation_protocol/
+docs/plan/
+docs/task/
+docs/theory/
+docs/task/
+docs/articles/
+
+# --- Project Specific ---
+**/plan_a_seguir.md
+
+# --- graphify ---
+/graphify-out/
+.graphifyignore
