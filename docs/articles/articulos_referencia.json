@@ -1,0 +1,100 @@
+[
+  {
+    "id": "2404.07191v2",
+    "title": "InstantMesh: Efficient 3D Mesh Generation from a Single Image with Sparse-view Large Reconstruction Models",
+    "authors": [
+      "Jiale Xu",
+      "Weihao Cheng",
+      "Yiming Gao",
+      "Xintao Wang",
+      "Shenghua Gao",
+      "Ying Shan"
+    ],
+    "doi": null,
+    "published_year": 2024,
+    "published_date": "2024-04-10T17:48:37+00:00",
+    "abstract": "We present InstantMesh, a feed-forward framework for instant 3D mesh generation from a single image, featuring state-of-the-art generation quality and significant training scalability. By synergizing the strengths of an off-the-shelf multiview diffusion model and a sparse-view reconstruction model based on the LRM architecture, InstantMesh is able to create diverse 3D assets within 10 seconds. To enhance the training efficiency and exploit more geometric supervisions, e.g, depths and normals, we integrate a differentiable iso-surface extraction module into our framework and directly optimize on the mesh representation. Experimental results on public datasets demonstrate that InstantMesh significantly outperforms other latest image-to-3D baselines, both qualitatively and quantitatively. We release all the code, weights, and demo of InstantMesh, with the intention that it can make substantial contributions to the community of 3D generative AI and empower both researchers and content creators.",
+    "url": "https://arxiv.org/pdf/2404.07191v2",
+    "categories": [
+      "cs.CV"
+    ]
+  },
+  {
+    "id": "2605.09856v1",
+    "title": "MoPO: Incorporating Motion Prior for Occluded Human Mesh Recovery",
+    "authors": [
+      "Tao Tang",
+      "Hong Liu",
+      "Xinshun Wang",
+      "Wanruo Zhang"
+    ],
+    "doi": null,
+    "published_year": 2026,
+    "published_date": "2026-05-11T01:25:08+00:00",
+    "abstract": "Although recent studies have made remarkable progress in human mesh recovery, they still exhibit limited robustness to occlusions and often produce inaccurate poses and severe motion jitter due to the insufficient spatial features for occluded body parts. Inspired by the rapid advancements in human motion prediction, we discover that compared to occluded image features, pose sequence inherently contains reliable motion prior for estimating occluded body parts. In this paper, we incorporate Motion Prior for Occluded human mesh recovery, called MoPO. Our MoPO mainly consists of two components: 1) The motion de-occlusion module, where we propose a spatial-temporal occlusion detector to detect joint visibility, and then we propose a lightweight motion predictor to complete the occluded body parts by predicting the most plausible joint positions based on history poses. 2) The motion-aware fusion and refinement module, which fuses the completed joint sequence with image features to estimate human shape and initial human pose. Moreover, the completed joint sequence is further used to refine the final human pose through inverse kinematics, which provides the occlusion-free motion prior for regressing human poses. Extensive experiments demonstrate that MoPO achieves state-of-the-art performance on both occlusion-specific and standard benchmarks, significantly enhancing the accuracy and temporal consistency of occluded human mesh recovery. Our code and demo can be found in the supplementary material.",
+    "url": "https://arxiv.org/pdf/2605.09856v1",
+    "categories": [
+      "cs.CV",
+      "cs.AI"
+    ]
+  },
+  {
+    "Description": "References on human motion retargeting and skeleton estimation.",
+    "id": "2404.11557v3",
+    "title": "Spatio-Temporal Motion Retargeting for Quadruped Robots",
+    "authors": [
+      "Taerim Yoon",
+      "Dongho Kang",
+      "Seungmin Kim",
+      "Jin Cheng",
+      "Minsung Ahn",
+      "Stelian Coros",
+      "Sungjoon Choi"
+    ],
+    "doi": null,
+    "published_year": 2024,
+    "published_date": "2024-04-17T17:00:26+00:00",
+    "abstract": "This work presents a motion retargeting approach for legged robots, aimed at transferring the dynamic and agile movements to robots from source motions. In particular, we guide the imitation learning procedures by transferring motions from source to target, effectively bridging the morphological disparities while ensuring the physical feasibility of the target system. In the first stage, we focus on motion retargeting at the kinematic level by generating kinematically feasible whole-body motions from keypoint trajectories. Following this, we refine the motion at the dynamic level by adjusting it in the temporal domain while adhering to physical constraints. This process facilitates policy training via reinforcement learning, enabling precise and robust motion tracking. We demonstrate that our approach successfully transforms noisy motion sources, such as hand-held camera videos, into robot-specific motions that align with the morphology and physical properties of the target robots. Moreover, we demonstrate terrain-aware motion retargeting to perform BackFlip on top of a box. We successfully deployed these skills to four robots with different dimensions and physical properties in the real world through hardware experiments.",
+    "url": "https://arxiv.org/pdf/2404.11557v3",
+    "categories": [
+      "cs.RO"
+    ]
+  },
+  {
+    "id": "2507.08981v1",
+    "title": "Video Inference for Human Mesh Recovery with Vision Transformer",
+    "authors": [
+      "Hanbyel Cho",
+      "Jaesung Ahn",
+      "Yooshin Cho",
+      "Junmo Kim"
+    ],
+    "doi": null,
+    "published_year": 2025,
+    "published_date": "2025-07-11T19:31:42+00:00",
+    "abstract": "Human Mesh Recovery (HMR) from an image is a challenging problem because of the inherent ambiguity of the task. Existing HMR methods utilized either temporal information or kinematic relationships to achieve higher accuracy, but there is no method using both. Hence, we propose \"Video Inference for Human Mesh Recovery with Vision Transformer (HMR-ViT)\" that can take into account both temporal and kinematic information. In HMR-ViT, a Temporal-kinematic Feature Image is constructed using feature vectors obtained from video frames by an image encoder. When generating the feature image, we use a Channel Rearranging Matrix (CRM) so that similar kinematic features could be located spatially close together. The feature image is then further encoded using Vision Transformer, and the SMPL pose and shape parameters are finally inferred using a regression network. Extensive evaluation on the 3DPW and Human3.6M datasets indicates that our method achieves a competitive performance in HMR.",
+    "url": "https://arxiv.org/pdf/2507.08981v1",
+    "categories": [
+      "cs.CV"
+    ]
+  },
+  {
+    "id": "2405.05428v1",
+    "title": "Adversary-Guided Motion Retargeting for Skeleton Anonymization",
+    "authors": [
+      "Thomas Carr",
+      "Depeng Xu",
+      "Aidong Lu"
+    ],
+    "doi": null,
+    "published_year": 2024,
+    "published_date": "2024-05-08T21:18:02+00:00",
+    "abstract": "Skeleton-based motion visualization is a rising field in computer vision, especially in the case of virtual reality (VR). With further advancements in human-pose estimation and skeleton extracting sensors, more and more applications that utilize skeleton data have come about. These skeletons may appear to be anonymous but they contain embedded personally identifiable information (PII). In this paper we present a new anonymization technique that is based on motion retargeting, utilizing adversary classifiers to further remove PII embedded in the skeleton. Motion retargeting is effective in anonymization as it transfers the movement of the user onto the a dummy skeleton. In doing so, any PII linked to the skeleton will be based on the dummy skeleton instead of the user we are protecting. We propose a Privacy-centric Deep Motion Retargeting model (PMR) which aims to further clear the retargeted skeleton of PII through adversarial learning. In our experiments, PMR achieves motion retargeting utility performance on par with state of the art models while also reducing the performance of privacy attacks.",
+    "url": "https://arxiv.org/pdf/2405.05428v1",
+    "categories": [
+      "cs.CV",
+      "cs.CR",
+      "cs.LG"
+    ]
+  }
+]
