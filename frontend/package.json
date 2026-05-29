@@ -13,16 +13,22 @@
   },
   "dependencies": {
     "@astrojs/react": "^5.0.6",
+    "@react-three/drei": "^10.7.7",
+    "@react-three/fiber": "^9.6.1",
     "@types/react": "^19.2.15",
     "@types/react-dom": "^19.2.3",
     "astro": "^6.4.0",
     "react": "^19.2.6",
-    "react-dom": "^19.2.6"
+    "react-dom": "^19.2.6",
+    "three": "^0.184.0"
   },
   "pnpm": {
     "onlyBuiltDependencies": [
       "esbuild",
       "sharp"
     ]
+  },
+  "devDependencies": {
+    "@types/three": "^0.184.1"
   }
 }
