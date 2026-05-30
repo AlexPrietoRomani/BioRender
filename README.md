@@ -39,15 +39,18 @@ flowchart TD
         MP[FastAPI + MediaPipe Pose CPU]
     end
 
-    UI -->|1. Envía Imagen| GW -->|Encola| RD
-    UI -->|2. Envía Video| GW -->|Encola| RD
-    UI <-->|3. Stream de Cámara (WS)| GW <-->|Inferencia RT| MP
+    UI -->|"1. Envía Imagen"| GW
+    GW -->|"Encola"| RD
+    UI -->|"2. Envía Video"| GW
+    GW -->|"Encola"| RD
+    UI <-->|"3. Stream de Cámara (WS)"| GW
+    GW <-->|"Inferencia RT"| MP
     
-    RD -->|Workers| PipelineA
-    RD -->|Workers| PipelineB
+    RD -->|"Workers"| PipelineA
+    RD -->|"Workers"| PipelineB
     
-    PipelineA -->|Carga/Descarga Assets| S3
-    PipelineB -->|Carga/Descarga Assets| S3
+    PipelineA -->|"Carga/Descarga Assets"| S3
+    PipelineB -->|"Carga/Descarga Assets"| S3
 ```
 
 ### 🧬 Mapeo de Pipelines de Producción:
