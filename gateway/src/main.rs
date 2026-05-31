@@ -16,11 +16,12 @@
 pub mod models;
 pub mod retargeting;
 pub mod routes;
+pub mod services;
 
 use std::net::SocketAddr;
 use std::sync::Arc;
 use axum::{
-    routing::get,
+    routing::{get, post},
     Router,
 };
 use tower_http::cors::CorsLayer;
@@ -47,16 +48,29 @@ async fn main() {
         .build()
         .expect("No se pudo construir el cliente HTTP reqwest");
 
+    // Inicializar servicios de S3 y Redis de forma asíncrona
+    let minio_client = services::minio_client::MinioClient::new().await;
+    let redis_queue = services::redis_queue::RedisQueue::new()
+        .expect("No se pudo conectar a Redis para colas Celery");
+    let job_tracker = services::job_tracker::JobTracker::new()
+        .expect("No se pudo conectar a Redis para JobTracker");
+
     // Crear el estado compartido
     let shared_state = Arc::new(AppState {
         http_client,
         pose_service_url,
+        minio_client,
+        redis_queue,
+        job_tracker,
     });
 
     // Configurar rutas de Axum
     let app = Router::new()
         .route("/health", get(health_check))
         .route("/ws/live-pose", get(ws_handler))
+        .route("/api/generate-3d", post(routes::generate_3d::generate_3d_handler))
+        .route("/api/process-video", post(routes::process_video::process_video_handler))
+        .route("/api/jobs/:id", get(routes::jobs::get_job_status_handler))
         .with_state(shared_state)
         .layer(CorsLayer::permissive());
 
