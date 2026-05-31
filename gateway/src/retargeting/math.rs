@@ -20,6 +20,23 @@ use std::collections::HashMap;
 use glam::{Vec3, Quat};
 use crate::models::ws_messages::{PythonKeypoint, BoneRotation};
 
+/// Mapea y traduce nombres de articulaciones euler/landmarks provenientes de múltiples
+/// nomenclaturas (Mixamo, SMPL, etc.) a los keypoints estándar consumidos por BioRender.
+pub fn translate_keypoint_name(name: &str) -> String {
+    let clean = name.replace("mixamorig:", "").replace("mixamo:", "");
+    match clean.as_str() {
+        "LeftArm" | "LeftUpperArm" => "left_shoulder".to_string(),
+        "LeftForeArm" | "LeftLowerArm" => "left_elbow".to_string(),
+        "LeftHand" | "LeftWrist" => "left_wrist".to_string(),
+        "RightArm" | "RightUpperArm" => "right_shoulder".to_string(),
+        "RightForeArm" | "RightLowerArm" => "right_elbow".to_string(),
+        "RightHand" | "RightWrist" => "right_wrist".to_string(),
+        "LeftUpLeg" | "LeftHip" => "left_hip".to_string(),
+        "RightUpLeg" | "RightHip" => "right_hip".to_string(),
+        _ => clean,
+    }
+}
+
 /// Convierte la lista de keypoints planos provenientes del microservicio a un mapa indexado de vectores
 /// en coordenadas 3D de mano derecha, invirtiendo el eje Y de la cámara.
 ///
@@ -36,7 +53,8 @@ fn get_keypoint_map(keypoints: &[PythonKeypoint]) -> HashMap<String, Vec3> {
             0.5 - kp.y, // +Y apunta hacia arriba
             -kp.z,      // Mantener profundidad z invertida
         );
-        map.insert(kp.name.clone(), pos);
+        let translated_name = translate_keypoint_name(&kp.name);
+        map.insert(translated_name, pos);
     }
     map
 }
@@ -192,5 +210,13 @@ mod tests {
         assert!((arm_rot.quaternion[1]).abs() < 0.001);
         assert!((arm_rot.quaternion[2] - -0.7071).abs() < 0.001);
         assert!((arm_rot.quaternion[3] - 0.7071).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_translate_keypoint_name_mixamo() {
+        assert_eq!(translate_keypoint_name("mixamorig:LeftArm"), "left_shoulder");
+        assert_eq!(translate_keypoint_name("mixamo:RightForeArm"), "right_elbow");
+        assert_eq!(translate_keypoint_name("mixamorig:LeftUpLeg"), "left_hip");
+        assert_eq!(translate_keypoint_name("left_elbow"), "left_elbow");
     }
 }
