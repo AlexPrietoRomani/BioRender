@@ -12,8 +12,14 @@ services:
     environment:
       - RUST_LOG=info
       - POSE_SERVICE_URL=http://biorender-pose-rt:8001
+      - REDIS_URL=redis://biorender-redis:6379
+      - MINIO_ENDPOINT=http://biorender-minio:9000
+      - MINIO_ACCESS_KEY=biorenderadmin
+      - MINIO_SECRET_KEY=biorendersecret
     depends_on:
       - pose-rt
+      - redis
+      - minio
     deploy:
       resources:
         limits:
@@ -31,8 +37,57 @@ services:
     environment:
       - PORT=8001
       - HOST=0.0.0.0
+      - REDIS_URL=redis://biorender-redis:6379
+    depends_on:
+      - redis
     deploy:
       resources:
         limits:
           cpus: '2.0'
           memory: 1.5G
+        # Para habilitar aceleración GPU en hosts con nvidia-container-toolkit, descomentar este bloque:
+        # reservations:
+        #   devices:
+        #     - driver: nvidia
+        #       count: all
+        #       capabilities: [gpu]
+
+  # ── Message Broker & State Store (Redis) ──
+  redis:
+    image: redis:7-alpine
+    container_name: biorender-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+
+  # ── Object Storage (MinIO) ──
+  minio:
+    image: minio/minio:latest
+    container_name: biorender-minio
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      - MINIO_ROOT_USER=biorenderadmin
+      - MINIO_ROOT_PASSWORD=biorendersecret
+    volumes:
+      - minio_data:/data
+    command: server /data --console-address ":9001"
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+
+volumes:
+  redis_data:
+    name: biorender_redis_data
+  minio_data:
+    name: biorender_minio_data
+
