@@ -100,8 +100,11 @@ flowchart TB
 ```
 
 ### Flujo de una interacción típica:
-1.  **Pipeline Asíncrono (Pipeline A/B):** El navegador sube un archivo $\rightarrow$ El API Gateway (Rust) recibe el binario y lo almacena directamente en MinIO $\rightarrow$ Registra el Job e inserta un evento en Redis $\rightarrow$ El Worker de GPU Celery consume la tarea $\rightarrow$ Procesa el pipeline IA $\rightarrow$ Sube los assets finales a MinIO y marca el Job como `done` en Redis.
+1.  **Pipeline Asíncrono (Pipeline A/B):** El navegador sube un archivo $\rightarrow$ El API Gateway (Rust) recibe el binario y lo almacena directamente en MinIO $\rightarrow$ Registra el Job e inserta un evento en Redis $\rightarrow$ El Worker de IA en Celery consume la tarea $\rightarrow$ Procesa el pipeline IA (bajo GPU, o CPU si no hay CUDA activo) $\rightarrow$ Sube los assets finales a MinIO y marca el Job como `done` en Redis.
 2.  **Pipeline en Tiempo Real (Pipeline C):** El componente `LiveCamera` captura un stream de cámara web $\rightarrow$ Codifica frames a JPEG Base64 $\rightarrow$ Envía los frames vía WebSocket al Gateway $\rightarrow$ El Gateway delega la detección a `ms_pose_rt` $\rightarrow$ Recibe los keypoints 3D $\rightarrow$ Calcula instantáneamente el retargeting matemático con `RetargetEngine` en Rust $\rightarrow$ Devuelve los cuaterniones al navegador $\rightarrow$ `Viewer3D` rota los huesos del avatar.
+
+> [!NOTE]
+> **Bypass de Sandbox de Cámara en Windows**: El diseño del Pipeline C soluciona de raíz la imposibilidad de montar dispositivos USB de cámara físicos (`/dev/video0`) en contenedores Docker corriendo en hosts Windows/WSL2. Al capturar el stream en la Capa de Presentación del cliente, comprimir cada frame y transmitirlo secuencialmente por WebSocket, la infraestructura de contenedores funciona de forma desacoplada y 100% portable.
 
 ---
 
@@ -175,11 +178,11 @@ flowchart TD
 
 ## 5. Arquitectura de Despliegue (Infraestructura)
 
-El despliegue de BioRender utiliza contenedores Docker organizados localmente por `docker-compose` con mapeo de dispositivos NVIDIA para los workers IA pesados, y se integra mediante un proxy inverso:
+El despliegue de BioRender utiliza contenedores Docker organizados localmente por `docker-compose` con soporte dinámico de GPU (vía `nvidia-container-toolkit`) y fallback completo a CPU. Esto garantiza la ejecución portable sin comprometer el rendimiento en servidores con aceleración por hardware:
 
 ```mermaid
 flowchart LR
-    subgraph Host_Desarrollo["Entorno Local (Docker Compose / Localhost)"]
+    subgraph Host_Desarrollo["Entorno Local (Docker Desktop / Localhost)"]
         direction TB
         
         FE_Astro["Astro Front-End\n(:4321)"]
@@ -190,10 +193,10 @@ flowchart LR
             Minio_Svc["MinIO API\n(:9000)\nMinIO Console\n(:9001)"]
         end
         
-        subgraph Docker_IA_GPU["Workers IA (Acceso a GPU NVIDIA)"]
-            FastAPI_PoseRT["Pose Inferencia RT\n(ms_pose_rt :8001)"]
-            Celery_Workers["Celery GPU Workers\n(Zero123, InstantMesh, WHAM)"]
-            Blender_Headless["Blender Headless Worker\n(Blender Engine)"]
+        subgraph Docker_IA_Hibrido["Workers de IA e Inferencia (Híbrido CPU / GPU NVIDIA)"]
+            FastAPI_PoseRT["Pose Inferencia RT\n(ms_pose_rt :8001)\n[CPU / GPU Fallback]"]
+            Celery_Workers["Celery GPU Workers\n(Zero123, InstantMesh, WHAM)\n[Autodetección CUDA o CPU Hilos]"]
+            Blender_Headless["Blender Headless Worker\n(Blender Engine Eevee CPU/GPU)"]
         end
     end
 
@@ -207,6 +210,9 @@ flowchart LR
     Celery_Workers & Blender_Headless <-->|Lee/Escribe archivos| Minio_Svc
 ```
 
+> [!TIP]
+> **Optimización de Recursos**: Todos los contenedores de esta topología tienen límites rígidos de memoria (`limits.memory`) configurados en el compose file. Esto garantiza que las cargas concurrentes no desestabilicen el sistema operativo Windows anfitrión y mitiga las fugas de memoria OOM en el backend.
+
 ---
 
 ## 6. Decisiones Arquitectónicas Relevantes (ADRs Resumidos)
@@ -217,3 +223,5 @@ flowchart LR
 | **Orquestador Asíncrono de Colas en Redis (Celery)** | RabbitMQ, Apache Kafka | Python cuenta con una integración inmejorable con Celery sobre Redis. Minimiza la fricción de desarrollo al utilizar exactamente las mismas clases de negocio de inferencia profunda. |
 | **Retargeting Matemático de Huesos en el Gateway (Rust)** | Calcular retargeting en el Navegador (JavaScript) | Aliviar la carga computacional del dispositivo del cliente (móviles o portátiles de gama media). Rust con la librería `glam` realiza los cálculos vectoriales en $< 0.1ms$ por frame antes de despachar. |
 | **Almacenamiento compatible S3 local (MinIO)** | Almacenamiento local en disco rígido montado en carpetas | El uso de la API S3 mediante MinIO garantiza que el sistema sea cloud-native. Migrar a AWS S3 en producción requiere únicamente la edición de variables de entorno del archivo `.env`, sin modificar código. |
+| **Ingress Bypass de Cámara por WebSocket (Frontend-Proxy)** | Montaje directo de `/dev/video0` en Docker | Resuelve la restricción técnica de sandboxing de dispositivos USB del host Windows/WSL2 en Docker Desktop de forma nativa e independiente de la plataforma host, logrando máxima portabilidad. |
+| **Estrategia Híbrida de Inferencia (CPU/GPU Fallback)** | Contenedores separados exclusivos por hardware | Evita la duplicación y mantenimiento de imágenes Docker diferentes. El microservicio en runtime detecta CUDA (`torch.cuda.is_available()`) y ajusta la complejidad de los pesos y multihilos. |
