@@ -40,6 +40,8 @@ pub struct MinioClient {
 
 impl MinioClient {
     /// Inicializa un nuevo cliente de S3 configurado para MinIO.
+    /// Reintenta la auto-creación del bucket hasta 10 veces con 2 segundos entre intentos
+    /// para tolerar el tiempo de arranque de MinIO en Docker.
     pub async fn new() -> Self {
         let endpoint = env::var("MINIO_ENDPOINT").unwrap_or_else(|_| "http://localhost:9000".to_string());
         let access_key = env::var("MINIO_ACCESS_KEY").unwrap_or_else(|_| "biorenderadmin".to_string());
@@ -63,8 +65,41 @@ impl MinioClient {
 
         let client = aws_sdk_s3::Client::new(&config);
 
+        // Reintentar la auto-creación del bucket hasta 10 veces para tolerar el arranque de MinIO
+        tracing::info!("MinIO: Verificando/Creando bucket '{}'...", bucket);
+        let max_retries = 10u32;
+        let mut created = false;
+        for attempt in 1..=max_retries {
+            match client.create_bucket().bucket(&bucket).send().await {
+                Ok(_) => {
+                    tracing::info!("MinIO: Bucket '{}' creado exitosamente en intento {}/{}.", bucket, attempt, max_retries);
+                    created = true;
+                    break;
+                }
+                Err(err) => {
+                    let err_str = format!("{:?}", err);
+                    // BucketAlreadyOwnedByYou / BucketAlreadyExists = el bucket ya existe, OK
+                    if err_str.contains("BucketAlreadyOwnedByYou") || err_str.contains("BucketAlreadyExists") {
+                        tracing::info!("MinIO: Bucket '{}' ya existe. Continuando.", bucket);
+                        created = true;
+                        break;
+                    } else {
+                        tracing::warn!(
+                            "MinIO: Intento {}/{} fallido para bucket '{}': {:?}. Reintentando en 2s...",
+                            attempt, max_retries, bucket, err
+                        );
+                        tokio::time::sleep(Duration::from_secs(2)).await;
+                    }
+                }
+            }
+        }
+        if !created {
+            tracing::error!("MinIO: No se pudo crear/verificar el bucket '{}' después de {} intentos. Las subidas fallaran hasta que MinIO sea accesible.", bucket, max_retries);
+        }
+
         Self { client, bucket }
     }
+
 
     /// Sube un archivo binario (búfer de bytes) a una ruta (Key) del bucket.
     pub async fn upload_file(&self, key: &str, data: Vec<u8>, content_type: &str) -> Result<()> {

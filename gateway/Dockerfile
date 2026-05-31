@@ -1,5 +1,5 @@
 # ── Compilación ──
-FROM rust:1.86-slim AS builder
+FROM rust:1.91-slim-bookworm AS builder
 
 RUN apt-get update && apt-get install -y pkg-config libssl-dev && rm -rf /var/lib/apt/lists/*
 
