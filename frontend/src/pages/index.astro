@@ -4,13 +4,13 @@ import { BioRenderApp } from '../components/react/BioRenderApp';
 ---
 
 <Layout title="BioRender MVP - Real-time Motion Capture & Retargeting">
-	<main style={{ maxWidth: '1200px', margin: '0 auto', padding: '2rem 1.5rem' }}>
+	<main style="max-width: 1200px; margin: 0 auto; padding: 2rem 1.5rem;">
 		{/* ── Encabezado Estilo Retro Terminal ── */}
-		<header style={{ marginBottom: '3rem', borderBottom: '1px solid #2e2e2e', paddingBottom: '1.5rem' }}>
-			<h1 class="title-retro" style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>
+		<header style="margin-bottom: 3rem; border-bottom: 1px solid #2e2e2e; padding-bottom: 1.5rem;">
+			<h1 class="title-retro" style="font-size: 2rem; margin-bottom: 0.5rem;">
 				BioRender_RT
 			</h1>
-			<p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', letterSpacing: '0.05em' }}>
+			<p style="color: var(--text-muted); font-size: 0.85rem; letter-spacing: 0.05em;">
 				[SYSTEM_STATUS: ACTIVE] // RETARGETING EN TIEMPO REAL CON INFERENCIA CPU LOCAL
 			</p>
 		</header>
@@ -19,7 +19,7 @@ import { BioRenderApp } from '../components/react/BioRenderApp';
 		<BioRenderApp client:only="react" />
 
 		{/* ── Pie de página retro ── */}
-		<footer style={{ marginTop: '4rem', borderTop: '1px solid #2e2e2e', paddingTop: '1.5rem', textAlign: 'center', fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+		<footer style="margin-top: 4rem; border-top: 1px solid #2e2e2e; padding-top: 1.5rem; text-align: center; font-size: 0.7rem; color: var(--text-muted);">
 			<p>BIORENDER PUNK SYSTEM v0.1.0 // CONSTRUIDO CON RUST, PYTHON Y ASTRO</p>
 		</footer>
 	</main>
