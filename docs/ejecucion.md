@@ -111,6 +111,17 @@ cd frontend
 pnpm run dev
 ```
 
+**Terminal 4 — Workers Celery Híbridos (Ejecución CPU Local):**
+```bash
+# Terminal 4A - Worker de Proyección de Rostro (Generación GLB Fast-Track MS 3.5)
+cd services/generation_3d/ms_face_project
+celery -A worker worker --loglevel=info --queues=generation
+
+# Terminal 4B - Worker de Procesamiento de Video Offline (MediaPipe a BVH MS 4.1)
+cd services/video_render/ms_motion_extract
+celery -A worker worker --loglevel=info --queues=motion
+```
+
 ### 3.3 Puertos y Accesos Locales
 
 *   **Frontend (Astro Web App):** [http://localhost:4321](http://localhost:4321)

@@ -53,18 +53,23 @@ flowchart TD
     PipelineB -->|"Carga/Descarga Assets"| S3
 ```
 
-### 🧬 Mapeo de Pipelines de Producción:
-1.  **Pipeline A — Generación 3D (Offline Asíncrono):** Permite al usuario subir una sola foto de personaje en 2D (`ImageUploader`) y generar un avatar tridimensional rigged funcional completo (`.glb`) en menos de 10 segundos, integrando *Zero123++* (vistas multi-ángulo), *InstantMesh* (reconstrucción 3D) y *RigNet/AccuRig* (auto-rigging y pesado de piel).
-2.  **Pipeline B — Renderizado Offline de Video:** Permite al usuario subir un video pregrabado de un actor (`VideoUploader`), extraer sus movimientos a un formato de animación reusable (`.bvh`) usando *WHAM/HMR 2.0*, y renderizar headless en la GPU un video `.mp4` de alta fidelidad cinematográfica usando *Blender Headless (Eevee)*.
-3.  **Pipeline C — Inferencia en Tiempo Real (Este MVP):** Es el canal de menor latencia de la aplicación. Mantiene una conexión WebSocket persistente y ligera para realizar inferencias de landmarks corporales en tiempo real y traducirlas mediante cinemática local a cuaterniones de articulaciones de manera instantánea.
+### 🧬 Mapeo de Pipelines y Hibridación Local:
+1.  **Pipeline A — Generación 3D (Híbrido CPU/GPU):** 
+    *   *Modo Completo (GPU):* Integra *Zero123++*, *InstantMesh* y *RigNet* para reconstruir mallas 3D desde fotos.
+    *   *Modo Fast-Track (CPU local):* Mapea y proyecta de forma inteligente la foto de rostro del usuario (`target_image.png`) sobre una plantilla de avatar humanoid pre-rigged (`base_humanoid.glb`) usando coordenadas UV de **MediaPipe FaceMesh** en CPU en menos de **2 segundos** con nulo impacto de VRAM.
+2.  **Pipeline B — Renderizado Offline de Video:** 
+    *   *Modo Completo (GPU):* Extrae pose 3D con *WHAM/HMR 2.0* a formato `.bvh` y hornea video H.264 por Blender Headless.
+    *   *Modo Local (CPU):* Procesa `input_video.mp4` en lotes utilizando **MediaPipe Offline** en CPU para estimar poses cuadro a cuadro, y renderiza headless la animación BVH sobre tu avatar personalizado usando Blender optimizado en multi-hilos CPU.
+3.  **Pipeline C — Inferencia en Tiempo Real (Este MVP):** Conexión WebSocket ligera de baja latencia que captura tu webcam, estima landmarks y aplica un **Dynamic Bone Mapper** en Rust (`glam`) para imitar movimientos en vivo en el canvas de React Three Fiber de forma instantánea.
 
 ---
 
-## ⚡ Características Destacadas (MVP)
+## ⚡ Características Destacadas y Hibridación Local
 
+*   **Zustand Session Store (Frontend E2E):** Estado global de sesión unificado en el navegador que vincula el avatar personalizado recién generado (`activeAvatarUrl`) con la cámara en vivo y el visor WebGL de R3F reactivamente.
 *   **Captura WebRTC Fluida:** Captura continua a 30 FPS desde el navegador con un selector interactivo ciberpunk de entradas de video que soporta webcams integradas, cámaras virtuales y teléfonos móviles sincronizados vía *Enlace a Windows / DroidCam*.
 *   **Inferencia en CPU de Baja Latencia (< 8ms):** Pipeline de FastAPI en Python que decodifica frames Base64 JPEG y ejecuta MediaPipe Pose en CPU con complejidad optimizada, evitando la necesidad obligatoria de GPUs.
-*   **Motor Cinemático Integrado (Rust):** API Gateway asíncrono construido sobre Axum y Tokio que actúa como WebSocket Hub y ejecuta cálculos de traducción angular a cuaterniones con la librería matemática nativa `glam`.
+*   **Motor Cinemático y Bone Mapper (Rust):** API Gateway en Axum y Tokio que actúa como WebSocket Hub y ejecuta cálculos de traducción angular a cuaterniones con la librería matemática nativa `glam` mapeando dinámicamente articulaciones de origen a destino.
 *   **Visualización Interactiva WebGL (R3F):** Visor en tiempo real en React Three Fiber con grilla interactiva, controles de órbita y un esqueleto humanoid jerárquico articulado procedimental.
 *   **Estabilidad Extrema (Anti-Loops):** Manejo del ciclo de vida de WebSocket persistente en el frontend mediante `useRef` para evitar bucles infinitos de conexión, e implementación de un `ErrorBoundary` terminal retro de autodiagnóstico.
 
