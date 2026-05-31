@@ -26,6 +26,9 @@ use reqwest::Client;
 
 use crate::models::ws_messages::{FrameMessage, PythonPoseResponse, PoseResultMessage};
 use crate::retargeting::math::calculate_retargeting;
+use crate::services::minio_client::MinioClient;
+use crate::services::redis_queue::RedisQueue;
+use crate::services::job_tracker::JobTracker;
 
 /// Estado global compartido de la aplicación
 pub struct AppState {
@@ -33,6 +36,12 @@ pub struct AppState {
     pub http_client: Client,
     /// Endpoint base del microservicio de pose de Python (ej: http://localhost:8001)
     pub pose_service_url: String,
+    /// Cliente de interacción con el Object Storage MinIO
+    pub minio_client: MinioClient,
+    /// Gestor de colas Redis Celery
+    pub redis_queue: RedisQueue,
+    /// Rastreador de estados de jobs en Redis
+    pub job_tracker: JobTracker,
 }
 
 /// Manejador de la ruta para actualizar una conexión HTTP estándar a WebSocket.
