@@ -151,13 +151,51 @@ const HumanoidSkeleton: React.FC<{ boneRotations: BoneRotation[] }> = ({ boneRot
 };
 
 /**
- * Componente que carga dinámicamente un modelo GLB y lo posiciona en la escena.
+ * Componente que carga dinámicamente un modelo GLB y lo anima en tiempo real.
  */
-const DynamicGlbModel: React.FC<{ url: string }> = ({ url }) => {
+const DynamicGlbModel: React.FC<{ url: string; boneRotations?: BoneRotation[] }> = ({ url, boneRotations = [] }) => {
   const { scene } = useGLTF(url);
   
   // Clonar la escena para asegurar renderizados seguros en múltiples visores
   const clonedScene = React.useMemo(() => scene.clone(), [scene]);
+  
+  useEffect(() => {
+    if (!boneRotations || boneRotations.length === 0) return;
+    
+    boneRotations.forEach((rot) => {
+      const targetName = rot.bone_name; // 'LeftUpperArm', 'LeftLowerArm', etc.
+      
+      // Intentar mapear los nombres estándar a las nomenclaturas usuales de Mixamo en GLTF
+      const boneNamesToTry = [
+        targetName,
+        `mixamorig:${targetName}`,
+        `mixamorig${targetName}`,
+        targetName.toLowerCase(),
+        // Traducir a nomenclatura Mixamo canónica
+        targetName === 'Spine' ? 'mixamorigSpine' : '',
+        targetName === 'LeftUpperArm' ? 'mixamorigLeftArm' : '',
+        targetName === 'LeftLowerArm' ? 'mixamorigLeftForeArm' : '',
+        targetName === 'RightUpperArm' ? 'mixamorigRightArm' : '',
+        targetName === 'RightLowerArm' ? 'mixamorigRightForeArm' : '',
+      ].filter(Boolean);
+      
+      let boneObject: THREE.Object3D | null = null;
+      for (const name of boneNamesToTry) {
+        boneObject = clonedScene.getObjectByName(name!);
+        if (boneObject) break;
+      }
+      
+      if (boneObject) {
+        const q = new THREE.Quaternion(
+          rot.quaternion[0],
+          rot.quaternion[1],
+          rot.quaternion[2],
+          rot.quaternion[3]
+        );
+        boneObject.quaternion.copy(q);
+      }
+    });
+  }, [boneRotations, clonedScene]);
   
   return <primitive object={clonedScene} position={[0, -0.6, 0]} scale={[0.8, 0.8, 0.8]} />;
 };
@@ -211,7 +249,7 @@ export const Viewer3D: React.FC<Viewer3DProps> = ({ boneRotations = [], modelUrl
         {/* Renderizado condicional del modelo GLB o el esqueleto procedimental */}
         {modelUrl ? (
           <Suspense fallback={<LoadingSpinner />}>
-            <DynamicGlbModel url={modelUrl} />
+            <DynamicGlbModel url={modelUrl} boneRotations={boneRotations} />
           </Suspense>
         ) : (
           <HumanoidSkeleton boneRotations={boneRotations} />

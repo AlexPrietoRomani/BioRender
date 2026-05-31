@@ -34,7 +34,13 @@ pub async fn get_job_status_handler(
         Ok(Some(mut job_status)) => {
             // Si el estado es "done" y tenemos una key de S3, generamos la URL firmada al vuelo
             if job_status.status == "done" && !job_status.result_url.is_empty() && !job_status.result_url.starts_with("http") {
-                match state.minio_client.generate_presigned_get_url(&job_status.result_url).await {
+                let s3_key = if job_status.result_url.starts_with("biorender-assets/") {
+                    job_status.result_url.replacen("biorender-assets/", "", 1)
+                } else {
+                    job_status.result_url.clone()
+                };
+
+                match state.minio_client.generate_presigned_get_url(&s3_key).await {
                     Ok(presigned_url) => {
                         job_status.result_url = presigned_url;
                     }

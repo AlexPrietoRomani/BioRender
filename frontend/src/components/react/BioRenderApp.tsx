@@ -6,6 +6,7 @@ import { Viewer3D } from './Viewer3D';
 import { ImageUploader } from './ImageUploader';
 import { VideoUploader } from './VideoUploader';
 import { VideoPlayer } from './VideoPlayer';
+import { useSessionStore } from './sessionStore';
 
 /**
  * Componente Boundary para capturar fallas de renderizado en React (ej: WebGL crash).
@@ -72,11 +73,15 @@ const BioRenderMain: React.FC = () => {
   const [activeTab, setActiveTab] = useState<TabType>('realtime');
   const [boneRotations, setBoneRotations] = useState<BoneRotation[]>([]);
   
-  // Estados para persistir las subidas y los resultados de jobs entre pestañas
-  const [avatarGlbUrl, setAvatarGlbUrl] = useState<string | null>(null);
-  const [avatarJobId, setAvatarJobId] = useState<string | null>(null);
-  const [renderedVideoUrl, setRenderedVideoUrl] = useState<string | null>(null);
-  const [videoJobId, setVideoJobId] = useState<string | null>(null);
+  // Consumir el estado global reactivo de Zustand
+  const {
+    activeAvatarUrl,
+    avatarJobId,
+    renderedVideoUrl,
+    videoJobId,
+    setAvatar,
+    setVideo
+  } = useSessionStore();
 
   // Obtener URL de WebSocket de las variables de entorno
   const wsUrl = import.meta.env.PUBLIC_GATEWAY_WS_URL || 'ws://localhost:8080/ws/live-pose';
@@ -89,14 +94,12 @@ const BioRenderMain: React.FC = () => {
 
   // Manejador para finalizar la generación del Avatar (Pipeline A)
   const handleGenerationComplete = (glbUrl: string, jobId: string) => {
-    setAvatarGlbUrl(glbUrl);
-    setAvatarJobId(jobId);
+    setAvatar(glbUrl, jobId);
   };
 
   // Manejador para finalizar el retargeting y renderizado de video (Pipeline B)
   const handleRetargetingComplete = (videoUrl: string, jobId: string) => {
-    setRenderedVideoUrl(videoUrl);
-    setVideoJobId(jobId);
+    setVideo(videoUrl, jobId);
   };
 
   return (
@@ -150,7 +153,7 @@ const BioRenderMain: React.FC = () => {
           </div>
           
           <div style={{ flex: 1, display: 'flex' }}>
-            <Viewer3D boneRotations={boneRotations} />
+            <Viewer3D boneRotations={boneRotations} modelUrl={activeAvatarUrl} />
           </div>
         </div>
       )}
@@ -173,7 +176,7 @@ const BioRenderMain: React.FC = () => {
           </div>
           
           <div style={{ flex: 1, display: 'flex' }}>
-            <Viewer3D modelUrl={avatarGlbUrl} />
+            <Viewer3D modelUrl={activeAvatarUrl} />
           </div>
         </div>
       )}
@@ -205,7 +208,7 @@ const BioRenderMain: React.FC = () => {
           <div style={{ display: 'flex', gap: '1.5rem', flexWrap: 'wrap', width: '100%' }}>
             {/* Izquierda: Visor 3D del Avatar compilado */}
             <div style={{ flex: 1, minWidth: '400px', display: 'flex' }}>
-              <Viewer3D modelUrl={avatarGlbUrl} />
+              <Viewer3D modelUrl={activeAvatarUrl} />
             </div>
 
             {/* Derecha: VideoPlayer del Render de Blender */}

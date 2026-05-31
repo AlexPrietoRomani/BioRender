@@ -187,11 +187,108 @@ def extract_motion(payload: Dict[str, Any]) -> Dict[str, Any]:
         
         # 4. Procesar estimación de pose
         if pipeline == "mock_wham_pipeline":
-            print("[*] Ejecutando simulación de inferencia temporal WHAM en CPU...")
-            time.sleep(2.0)  # Simular latencia de inferencia
-            
-            # Generar bvh dummy con el conteo de frames del video real
-            bvh_content = generate_mock_bvh_content(frames_count if frames_count > 0 else 150)
+            print("[*] Ejecutando estimación cinemática MediaPipe Pose en CPU (CPU Fallback)...")
+            try:
+                import mediapipe as mp
+                
+                # Inicializar MediaPipe Pose en CPU
+                mp_pose = mp.solutions.pose
+                pose = mp_pose.Pose(
+                    static_image_mode=False,
+                    model_complexity=1,
+                    enable_segmentation=False,
+                    min_detection_confidence=0.5
+                )
+                
+                cap = cv2.VideoCapture(temp_video_path)
+                rotations_over_time = []
+                
+                while cap.isOpened():
+                    ret, frame = cap.read()
+                    if not ret:
+                        break
+                    
+                    # Convertir a RGB
+                    img_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                    results = pose.process(img_rgb)
+                    
+                    if results.pose_landmarks:
+                        landmarks = results.pose_landmarks.landmark
+                        
+                        # Landmarks claves de MediaPipe: Hombro Izquierdo (11), Codo Izquierdo (13), Muñeca Izquierda (15)
+                        l_shoulder = np.array([landmarks[11].x, landmarks[11].y, landmarks[11].z])
+                        l_elbow = np.array([landmarks[13].x, landmarks[13].y, landmarks[13].z])
+                        
+                        # Hombro Derecho (12), Codo Derecho (14), Muñeca Derecha (16)
+                        r_shoulder = np.array([landmarks[12].x, landmarks[12].y, landmarks[12].z])
+                        r_elbow = np.array([landmarks[14].x, landmarks[14].y, landmarks[14].z])
+                        
+                        # Calcular inclinación relativa de los brazos
+                        d_y_left = l_elbow[1] - l_shoulder[1]
+                        d_x_left = l_elbow[0] - l_shoulder[0]
+                        left_arm_angle = np.degrees(np.arctan2(d_y_left, d_x_left))
+                        
+                        d_y_right = r_elbow[1] - r_shoulder[1]
+                        d_x_right = r_elbow[0] - r_shoulder[0]
+                        right_arm_angle = np.degrees(np.arctan2(d_y_right, d_x_right))
+                        
+                        rotations_over_time.append((left_arm_angle, right_arm_angle))
+                    else:
+                        rotations_over_time.append((0.0, 0.0))
+                
+                cap.release()
+                pose.close()
+                
+                # Si obtuvimos suficientes frames, aplicamos suavizado con Savitzky-Golay
+                if len(rotations_over_time) > 4:
+                    left_arr = np.array([r[0] for r in rotations_over_time])
+                    right_arr = np.array([r[1] for r in rotations_over_time])
+                    
+                    # Suavizado cinemático
+                    left_smooth = savgol_filter(left_arr, window_length=5, polyorder=2)
+                    right_smooth = savgol_filter(right_arr, window_length=5, polyorder=2)
+                    
+                    # Escribir la animación BVH estructurada
+                    bvh_header = [
+                        "HIERARCHY",
+                        "ROOT hips",
+                        "{",
+                        "  OFFSET 0.00 0.00 0.00",
+                        "  CHANNELS 6 Xposition Yposition Zposition Xrotation Yrotation Zrotation",
+                        "  JOINT spine",
+                        "  {",
+                        "    OFFSET 0.00 0.20 0.00",
+                        "    CHANNELS 3 Xrotation Yrotation Zrotation",
+                        "    JOINT neck",
+                        "    {",
+                        "      OFFSET 0.00 0.30 0.00",
+                        "      CHANNELS 3 Xrotation Yrotation Zrotation",
+                        "      End Site",
+                        "      {",
+                        "        OFFSET 0.00 0.20 0.00",
+                        "      }",
+                        "    }",
+                        "  }",
+                        "}",
+                        "MOTION",
+                        f"Frames: {len(left_smooth)}",
+                        "Frame Time: 0.033333"
+                    ]
+                    
+                    motion_data = []
+                    for f in range(len(left_smooth)):
+                        t = f * 0.033333
+                        y_pos = 0.9 + 0.02 * np.sin(t * 2 * np.pi)
+                        # hips translation [x,y,z] e inclinaciones de brazos
+                        motion_data.append(f"0.00 {y_pos:.4f} 0.00 {left_smooth[f]:.4f} 0.00 {right_smooth[f]:.4f} 0.00 0.00 0.00")
+                        
+                    bvh_content = "\n".join(bvh_header) + "\n" + "\n".join(motion_data) + "\n"
+                    print("[+] Extracción completada en CPU usando MediaPipe Pose y filtro Savitzky-Golay.")
+                else:
+                    bvh_content = generate_mock_bvh_content(frames_count if frames_count > 0 else 150)
+            except Exception as err:
+                print(f"[!] Error al correr MediaPipe en CPU: {str(err)}. Usando fallback sinusoidal.")
+                bvh_content = generate_mock_bvh_content(frames_count if frames_count > 0 else 150)
         else:
             print("[*] Ejecutando inferencia real de WHAM en GPU...")
             # Aquí se ejecutaría la decodificación frame a frame y alimentación al modelo temporal.

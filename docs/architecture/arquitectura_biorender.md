@@ -40,22 +40,24 @@ flowchart TB
 
 ## 2. Componentes Internos (C4 – Nivel Contenedor)
 
-Desglose de la arquitectura de BioRender en sus aplicaciones y capas físicas independientes:
+Desglose de la arquitectura de BioRender en sus aplicaciones y capas físicas independientes, incorporando las optimizaciones para ejecución local:
 
 ```mermaid
 flowchart TB
     subgraph Cliente["Capa de Presentación (Navegador)"]
         UI_Astro["Astro Web App\n(Layouts y Páginas)"]
+        Zustand_Store["Zustand Session Store\n(Estado Global E2E / activeAvatarUrl)"]
         Viewer_3D["Visor R3F (React)\n(WebGL Canvas)"]
         LiveCamera["Live Camera (React)\n(WebRTC + Canvas Extractor)"]
         VideoUploader["Uploader Components\n(Subida e interfaz reactiva)"]
         
-        UI_Astro --> LiveCamera & Viewer_3D & VideoUploader
+        UI_Astro --> Zustand_Store
+        Zustand_Store --> LiveCamera & Viewer_3D & VideoUploader
     end
 
     subgraph Backend["Capa de Aplicación y Orquestación"]
         API_Gateway["Rust API Gateway\n(Axum Server :8080)"]
-        Retarget_Engine["Motor de Retargeting\n(Rust glam local)"]
+        Retarget_Engine["Motor de Retargeting\n(Rust glam local + Dynamic Bone Mapper)"]
         WS_Hub["WebSocket Hub\n(Gestor de conexiones RT)"]
         
         API_Gateway --- WS_Hub
@@ -63,18 +65,23 @@ flowchart TB
     end
 
     subgraph Colas["Capa de Mensajería y Eventos"]
-        Redis[("Redis Broker\n(LPUSH queue:*)")]
+        Redis[("Redis Broker & Cache\n(LPUSH queue:*)")]
     end
 
-    subgraph Workers["Workers de GPU (Python Celery)"]
+    subgraph Workers["Workers Híbridos CPU/GPU (Python Celery & Rust)"]
         direction TB
-        W_Multiview["MS 3.1: Zero123++\n(Generación Multi-vista)"]
-        W_Reconstruct["MS 3.2: InstantMesh\n(Reconstrucción 3DGS)"]
-        W_Rigging["MS 3.3: RigNet\n(Auto-Rigging Grafo)"]
-        W_AssetAssembly["MS 3.4: Asset Assembler\n(Rust Crate compilado)"]
+        subgraph Pipeline_A_Gen["Pipeline A: Avatar Generator"]
+            W_Multiview["MS 3.1: Zero123++\n(Generación Multi-vista Heavy)"]
+            W_Reconstruct["MS 3.2: InstantMesh\n(Malla OBJ Heavy)"]
+            W_Rigging["MS 3.3: RigNet\n(Auto-Rigging GCN)"]
+            W_FaceProject["MS 3.5: Face Projector CPU\n(Fast-Track Face Texture UV Projection)"]
+            W_AssetAssembly["MS 3.4: Asset Assembler\n(Rust Crate GLB Compiler)"]
+        end
         
-        W_Motion["MS 4.1: WHAM\n(SMPL a BVH)"]
-        W_Blender["MS 4.2: Headless Blender\n(Blender Python Render)"]
+        subgraph Pipeline_B_Video["Pipeline B: Video Motion Render"]
+            W_Motion["MS 4.1: WHAM / MediaPipe Offline\n(SMPL/Webcam Video a BVH)"]
+            W_Blender["MS 4.2: Headless Blender\n(Blender Python Render CPU/GPU)"]
+        end
     end
 
     subgraph Inferencia_RT["Pipeline Tiempo Real (Pipeline C)"]
@@ -93,18 +100,21 @@ flowchart TB
     API_Gateway -->|Sube inputs| Minio
     API_Gateway -->|Encola Jobs| Redis
     
-    Redis -->|Consumen tareas| W_Multiview & W_Reconstruct & W_Rigging & W_AssetAssembly & W_Motion & W_Blender
-    W_Multiview & W_Reconstruct & W_Rigging & W_AssetAssembly & W_Motion & W_Blender <-->|Lecturas/Escrituras binarias| Minio
+    Redis -->|Consumen tareas| W_Multiview & W_Reconstruct & W_Rigging & W_FaceProject & W_AssetAssembly & W_Motion & W_Blender
+    W_Multiview & W_Reconstruct & W_Rigging & W_FaceProject & W_AssetAssembly & W_Motion & W_Blender <-->|Lecturas/Escrituras binarias| Minio
     
     WS_Hub -->|POST /detect-pose via HTTP| FastAPI_Pose
 ```
 
 ### Flujo de una interacción típica:
-1.  **Pipeline Asíncrono (Pipeline A/B):** El navegador sube un archivo $\rightarrow$ El API Gateway (Rust) recibe el binario y lo almacena directamente en MinIO $\rightarrow$ Registra el Job e inserta un evento en Redis $\rightarrow$ El Worker de IA en Celery consume la tarea $\rightarrow$ Procesa el pipeline IA (bajo GPU, o CPU si no hay CUDA activo) $\rightarrow$ Sube los assets finales a MinIO y marca el Job como `done` en Redis.
-2.  **Pipeline en Tiempo Real (Pipeline C):** El componente `LiveCamera` captura un stream de cámara web $\rightarrow$ Codifica frames a JPEG Base64 $\rightarrow$ Envía los frames vía WebSocket al Gateway $\rightarrow$ El Gateway delega la detección a `ms_pose_rt` $\rightarrow$ Recibe los keypoints 3D $\rightarrow$ Calcula instantáneamente el retargeting matemático con `RetargetEngine` en Rust $\rightarrow$ Devuelve los cuaterniones al navegador $\rightarrow$ `Viewer3D` rota los huesos del avatar.
+1.  **Pipeline Asíncrono (Pipeline A/B):** El navegador sube un archivo $\rightarrow$ El API Gateway (Rust) recibe el binario y lo almacena directamente en MinIO $\rightarrow$ Registra el Job e inserta un evento en Redis $\rightarrow$ El Worker de IA en Celery consume la tarea.
+    *   *Si es Generación de Avatar (Pipeline A):* El sistema detecta disponibilidad de hardware. En entornos de CPU estándar local, ejecuta la opción **"Fast-Track" de Face Projector (MS 3.5)**, mapeando la foto del rostro del usuario sobre un avatar pre-rigged canónico mediante proyección de coordenadas UV en menos de 2 segundos.
+    *   *Si es Inferencia por Video (Pipeline B):* Se procesa el video subido. En local sin GPU pesada, **MS 4.1** realiza inferencia por batch usando **MediaPipe Offline** en CPU para extraer rotaciones continuas a un archivo `motion.bvh`, el cual Blender anima de forma headless sobre el `.glb` del usuario, guardando el video MP4 resultante en MinIO.
+2.  **Pipeline en Tiempo Real (Pipeline C):** El componente `LiveCamera` captura un stream de cámara web $\rightarrow$ Codifica frames a JPEG Base64 $\rightarrow$ Envía los frames vía WebSocket al Gateway $\rightarrow$ El Gateway delega la detección a `ms_pose_rt` $\rightarrow$ Recibe los keypoints 3D $\rightarrow$ Calcula instantáneamente el retargeting cinemático adaptativo aplicando el **Dynamic Bone Mapper** (que traduce dinámicamente articulaciones de MediaPipe a la armature del avatar en Rust usando la librería `glam`) $\rightarrow$ Devuelve los cuaterniones al navegador $\rightarrow$ `Viewer3D` rota los huesos del avatar.
 
 > [!NOTE]
 > **Bypass de Sandbox de Cámara en Windows**: El diseño del Pipeline C soluciona de raíz la imposibilidad de montar dispositivos USB de cámara físicos (`/dev/video0`) en contenedores Docker corriendo en hosts Windows/WSL2. Al capturar el stream en la Capa de Presentación del cliente, comprimir cada frame y transmitirlo secuencialmente por WebSocket, la infraestructura de contenedores funciona de forma desacoplada y 100% portable.
+
 
 ---
 
