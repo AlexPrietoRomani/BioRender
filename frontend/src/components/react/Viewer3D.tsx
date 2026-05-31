@@ -1,6 +1,6 @@
-import React, { useRef, useEffect } from 'react';
-import { Canvas } from '@react-three/fiber';
-import { OrbitControls } from '@react-three/drei';
+import React, { useRef, useEffect, Suspense } from 'react';
+import { Canvas, useFrame } from '@react-three/fiber';
+import { OrbitControls, useGLTF } from '@react-three/drei';
 import * as THREE from 'three';
 import type { BoneRotation } from '../../hooks/useWebSocket';
 
@@ -8,7 +8,11 @@ interface Viewer3DProps {
   /**
    * Colección de rotaciones de hueso calculadas en el Gateway.
    */
-  boneRotations: BoneRotation[];
+  boneRotations?: BoneRotation[];
+  /**
+   * URL del modelo GLB a cargar dinámicamente.
+   */
+  modelUrl?: string | null;
 }
 
 /**
@@ -58,13 +62,13 @@ const HumanoidSkeleton: React.FC<{ boneRotations: BoneRotation[] }> = ({ boneRot
 
   return (
     <group position={[0, -0.6, 0]}>
-      {/* ── Pelvis Central ── */}
+      {/* Pelvis Central */}
       <mesh>
         <sphereGeometry args={[0.16, 16, 16]} />
         <meshStandardMaterial color="#444" roughness={0.6} />
       </mesh>
 
-      {/* ── Spine (Tronco de Columna) ── */}
+      {/* Spine (Tronco de Columna) */}
       <group ref={spineRef}>
         {/* Torso */}
         <mesh position={[0, 0.45, 0]}>
@@ -84,15 +88,13 @@ const HumanoidSkeleton: React.FC<{ boneRotations: BoneRotation[] }> = ({ boneRot
           <meshStandardMaterial color="#e5e5e5" roughness={0.3} />
         </mesh>
 
-        {/* ── EXTREMIDAD SUPERIOR IZQUIERDA ── */}
+        {/* EXTREMIDAD SUPERIOR IZQUIERDA */}
         {/* Pivote del Hombro Izquierdo */}
         <group ref={leftUpperArmRef} position={[-0.2, 0.8, 0]}>
-          {/* Hombro Izquierdo (Articulación) */}
           <mesh>
             <sphereGeometry args={[0.075, 16, 16]} />
             <meshStandardMaterial color="#8a2be2" roughness={0.4} />
           </mesh>
-          {/* Brazo Superior Izquierdo (Cilindro que apunta en -X) */}
           <mesh position={[-0.2, 0, 0]} rotation={[0, 0, Math.PI / 2]}>
             <cylinderGeometry args={[0.045, 0.038, 0.4, 16]} />
             <meshStandardMaterial color="#a0a0a0" roughness={0.4} />
@@ -100,17 +102,14 @@ const HumanoidSkeleton: React.FC<{ boneRotations: BoneRotation[] }> = ({ boneRot
 
           {/* Pivote del Codo Izquierdo */}
           <group ref={leftLowerArmRef} position={[-0.4, 0, 0]}>
-            {/* Codo Izquierdo (Articulación) */}
             <mesh>
               <sphereGeometry args={[0.06, 16, 16]} />
               <meshStandardMaterial color="#8a2be2" roughness={0.4} />
             </mesh>
-            {/* Antebrazo Izquierdo (Cilindro que apunta en -X) */}
             <mesh position={[-0.2, 0, 0]} rotation={[0, 0, Math.PI / 2]}>
               <cylinderGeometry args={[0.038, 0.03, 0.4, 16]} />
               <meshStandardMaterial color="#6e6e6e" roughness={0.4} />
             </mesh>
-            {/* Mano Izquierda (Articulación) */}
             <mesh position={[-0.42, 0, 0]}>
               <sphereGeometry args={[0.042, 16, 16]} />
               <meshStandardMaterial color="#00ffff" roughness={0.4} />
@@ -118,15 +117,13 @@ const HumanoidSkeleton: React.FC<{ boneRotations: BoneRotation[] }> = ({ boneRot
           </group>
         </group>
 
-        {/* ── EXTREMIDAD SUPERIOR DERECHA ── */}
+        {/* EXTREMIDAD SUPERIOR DERECHA */}
         {/* Pivote del Hombro Derecho */}
         <group ref={rightUpperArmRef} position={[0.2, 0.8, 0]}>
-          {/* Hombro Derecho (Articulación) */}
           <mesh>
             <sphereGeometry args={[0.075, 16, 16]} />
             <meshStandardMaterial color="#8a2be2" roughness={0.4} />
           </mesh>
-          {/* Brazo Superior Derecho (Cilindro que apunta en +X) */}
           <mesh position={[0.2, 0, 0]} rotation={[0, 0, -Math.PI / 2]}>
             <cylinderGeometry args={[0.045, 0.038, 0.4, 16]} />
             <meshStandardMaterial color="#a0a0a0" roughness={0.4} />
@@ -134,17 +131,14 @@ const HumanoidSkeleton: React.FC<{ boneRotations: BoneRotation[] }> = ({ boneRot
 
           {/* Pivote del Codo Derecho */}
           <group ref={rightLowerArmRef} position={[0.4, 0, 0]}>
-            {/* Codo Derecho (Articulación) */}
             <mesh>
               <sphereGeometry args={[0.06, 16, 16]} />
               <meshStandardMaterial color="#8a2be2" roughness={0.4} />
             </mesh>
-            {/* Antebrazo Derecho (Cilindro que apunta en +X) */}
             <mesh position={[0.2, 0, 0]} rotation={[0, 0, -Math.PI / 2]}>
               <cylinderGeometry args={[0.038, 0.03, 0.4, 16]} />
               <meshStandardMaterial color="#6e6e6e" roughness={0.4} />
             </mesh>
-            {/* Mano Derecha (Articulación) */}
             <mesh position={[0.42, 0, 0]}>
               <sphereGeometry args={[0.042, 16, 16]} />
               <meshStandardMaterial color="#00ffff" roughness={0.4} />
@@ -157,47 +151,89 @@ const HumanoidSkeleton: React.FC<{ boneRotations: BoneRotation[] }> = ({ boneRot
 };
 
 /**
+ * Componente que carga dinámicamente un modelo GLB y lo posiciona en la escena.
+ */
+const DynamicGlbModel: React.FC<{ url: string }> = ({ url }) => {
+  const { scene } = useGLTF(url);
+  
+  // Clonar la escena para asegurar renderizados seguros en múltiples visores
+  const clonedScene = React.useMemo(() => scene.clone(), [scene]);
+  
+  return <primitive object={clonedScene} position={[0, -0.6, 0]} scale={[0.8, 0.8, 0.8]} />;
+};
+
+/**
+ * Indicador de carga animado en 3D para el visor WebGL.
+ */
+const LoadingSpinner: React.FC = () => {
+  const meshRef = useRef<THREE.Mesh>(null);
+  
+  useFrame((state) => {
+    if (meshRef.current) {
+      meshRef.current.rotation.y = state.clock.getElapsedTime() * 1.5;
+      meshRef.current.rotation.x = state.clock.getElapsedTime() * 0.7;
+    }
+  });
+
+  return (
+    <mesh ref={meshRef} position={[0, 0.4, 0]}>
+      <boxGeometry args={[0.4, 0.4, 0.4]} />
+      <meshStandardMaterial color="#00f07f" wireframe roughness={0.1} />
+    </mesh>
+  );
+};
+
+/**
  * Componente principal del visor 3D que inicializa el canvas de React Three Fiber
  * y agrega controles de cámara, luces y mallas procedimentales ciberpunk.
  */
-export const Viewer3D: React.FC<Viewer3DProps> = ({ boneRotations }) => {
+export const Viewer3D: React.FC<Viewer3DProps> = ({ boneRotations = [], modelUrl = null }) => {
   return (
-    <div className="panel-terminal" style={{ flex: 1, height: '500px', padding: '0.5rem', position: 'relative' }}>
+    <div className="panel-terminal" style={{ flex: 1, height: '100%', minHeight: '450px', padding: '0.5rem', position: 'relative', overflow: 'hidden' }}>
       <div style={{
         position: 'absolute', top: '15px', left: '15px', zIndex: 10,
-        fontSize: '0.7rem', color: '#8e8e8e', pointerEvents: 'none'
+        fontSize: '0.7rem', color: '#00f07f', pointerEvents: 'none',
+        fontFamily: 'var(--font-mono)', letterSpacing: '0.05em'
       }}>
-        [WebGL_RETARGETING_VIEWPORT]
+        {modelUrl ? '[GLB_RENDER_VIEWPORT]' : '[PROCEDURAL_SKELETON_VIEWPORT]'}
       </div>
 
       <Canvas
-        camera={{ position: [0, 1.2, 2.5], fov: 50 }}
-        style={{ background: '#171717', width: '100%', height: '100%' }}
+        camera={{ position: [0, 1.0, 2.2], fov: 45 }}
+        style={{ background: '#0a0a0c', width: '100%', height: '100%' }}
       >
-        {/* Iluminación básica de la escena */}
-        <ambientLight intensity={0.4} />
-        <directionalLight position={[2, 4, 3]} intensity={1.0} castShadow />
-        <directionalLight position={[-2, 1, -2]} intensity={0.3} color="#8a2be2" />
+        {/* Iluminación base */}
+        <ambientLight intensity={0.5} />
+        <directionalLight position={[3, 5, 4]} intensity={1.2} castShadow />
+        <directionalLight position={[-3, 1, -2]} intensity={0.4} color="#8a2be2" />
+        <pointLight position={[0, 2, 0]} intensity={0.6} color="#00f07f" />
 
-        {/* Modelo humanoid procedimental */}
-        <HumanoidSkeleton boneRotations={boneRotations} />
+        {/* Renderizado condicional del modelo GLB o el esqueleto procedimental */}
+        {modelUrl ? (
+          <Suspense fallback={<LoadingSpinner />}>
+            <DynamicGlbModel url={modelUrl} />
+          </Suspense>
+        ) : (
+          <HumanoidSkeleton boneRotations={boneRotations} />
+        )}
 
-        {/* Grilla de base ciberpunk (Helper nativo de Three.js para máxima compatibilidad) */}
-        <gridHelper args={[10, 20, '#8a2be2', '#2e2e2e']} position={[0, -0.6, 0]} />
+        {/* Grilla cyberpunk */}
+        <gridHelper args={[12, 24, '#00f07f', '#1b1b22']} position={[0, -0.6, 0]} />
 
-        {/* Controles de cámara de órbita interactivos */}
+        {/* Controles de cámara */}
         <OrbitControls
           enableZoom={true}
-          maxPolarAngle={Math.PI / 2 + 0.1}
+          maxPolarAngle={Math.PI / 2 + 0.05}
           target={[0, 0.4, 0]}
         />
       </Canvas>
       
       <div style={{
         position: 'absolute', bottom: '15px', right: '15px', zIndex: 10,
-        fontSize: '0.6rem', color: '#00ffff', pointerEvents: 'none'
+        fontSize: '0.65rem', color: '#8e8e8e', pointerEvents: 'none',
+        fontFamily: 'var(--font-mono)'
       }}>
-        GRID: 10x10 | ORBIT_ENABLED
+        {modelUrl ? 'SOURCE: OBJECT_STORAGE (S3)' : 'SOURCE: WEBSOCKET_RT'}
       </div>
     </div>
   );
