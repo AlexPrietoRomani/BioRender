@@ -9,13 +9,14 @@ RUN apt-get update && apt-get install -y \
 
 WORKDIR /app
 
-# Instalar PyTorch CPU primero. Esto es un truco de optimización crítico para evitar
-# que MediaPipe descargue la versión de PyTorch habilitada para CUDA/NVIDIA,
-# ahorrando de inmediato más de 4.5 GB de peso en la imagen final.
-RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu
+# Instalar uv para acelerar drásticamente los builds y la gestión de dependencias
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+
+# Instalar PyTorch CPU primero usando uv. Esto evita descargar dependencias CUDA de 4.5+ GB
+RUN uv pip install --system --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu
 
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN uv pip install --system --no-cache-dir -r requirements.txt
 
 COPY . .
 
@@ -29,3 +30,4 @@ ENV OPENBLAS_NUM_THREADS=1
 ENV PYTHONUNBUFFERED=1
 
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8001"]
+
