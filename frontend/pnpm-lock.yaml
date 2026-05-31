@@ -35,6 +35,9 @@ importers:
       three:
         specifier: ^0.184.0
         version: 0.184.0
+      zustand:
+        specifier: ^5.0.14
+        version: 5.0.14(@types/react@19.2.15)(react@19.2.6)(use-sync-external-store@1.6.0(react@19.2.6))
     devDependencies:
       '@types/three':
         specifier: ^0.184.1
