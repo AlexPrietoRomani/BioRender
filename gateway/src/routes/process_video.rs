@@ -26,6 +26,7 @@ pub async fn process_video_handler(
     State(state): State<Arc<AppState>>,
     mut multipart: Multipart,
 ) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
+    let start_time = std::time::Instant::now();
     let job_id = Uuid::new_v4().to_string();
     let mut file_bytes: Option<Vec<u8>> = None;
     let mut content_type = "video/mp4".to_string();
@@ -35,6 +36,7 @@ pub async fn process_video_handler(
     tracing::info!("Procesando subida multipart para procesamiento de video. Job ID: {}", job_id);
 
     // 1. Extraer los campos multipart de la petición
+    let parse_start = std::time::Instant::now();
     while let Ok(Some(field)) = multipart.next_field().await {
         if let Some(name) = field.name() {
             match name {
@@ -100,10 +102,12 @@ pub async fn process_video_handler(
             ));
         }
     };
+    let parse_dur = parse_start.elapsed().as_millis();
 
     let video_key = format!("uploads/{}/input_video.mp4", job_id);
 
     // 2. Subir video a MinIO
+    let upload_start = std::time::Instant::now();
     if let Err(err) = state.minio_client.upload_file(&video_key, bytes, &content_type).await {
         tracing::error!("Fallo al subir video del Job {} a MinIO: {}", job_id, err);
         return Err((
@@ -113,8 +117,10 @@ pub async fn process_video_handler(
             })),
         ));
     }
+    let upload_dur = upload_start.elapsed().as_millis();
 
     // 3. Registrar estado inicial del Job en Redis a 'queued'
+    let init_start = std::time::Instant::now();
     if let Err(err) = state.job_tracker.initialize_job(&job_id).await {
         tracing::error!("Fallo al inicializar Job de video {} en Redis: {}", job_id, err);
         return Err((
@@ -124,8 +130,10 @@ pub async fn process_video_handler(
             })),
         ));
     }
+    let init_dur = init_start.elapsed().as_millis();
 
     // 4. Encolar tarea Celery en la cola 'motion'
+    let enqueue_start = std::time::Instant::now();
     let celery_payload = serde_json::json!({
         "job_id": job_id.clone(),
         "avatar_glb_key": avatar_glb_key,
@@ -144,15 +152,21 @@ pub async fn process_video_handler(
             })),
         ));
     }
+    let enqueue_dur = enqueue_start.elapsed().as_millis();
+    let total_dur = start_time.elapsed().as_millis();
 
-    tracing::info!("Job {} de procesamiento de video despachado exitosamente.", job_id);
+    tracing::info!(
+        "[PERF_LOG] Handler: process_video_handler | Parse Multipart: {}ms | Subida S3: {}ms | Inicializacion: {}ms | Encolado: {}ms | Duracion Total: {}ms",
+        parse_dur, upload_dur, init_dur, enqueue_dur, total_dur
+    );
 
-    // Retornar 202 Accepted
+    // Retornar 202 Accepted con telemetría de rendimiento
     Ok((
         StatusCode::ACCEPTED,
         Json(serde_json::json!({
             "job_id": job_id,
             "status": "queued",
+            "duration_ms": total_dur,
             "message": "Procesamiento de video encolado de forma exitosa. Realice polling sobre /api/jobs/{job_id}"
         })),
     ))
