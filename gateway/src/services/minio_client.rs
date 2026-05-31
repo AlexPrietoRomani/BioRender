@@ -1,0 +1,97 @@
+/// Archivo: minio_client.rs
+/// Fecha de modificación: 31/05/2026
+/// Autor: Alex Prieto
+///
+/// Descripción:
+/// Proveedor de servicio asíncrono en Rust para interactuar con el Object Storage (MinIO).
+/// Proporciona utilidades para inicializar el cliente usando credenciales de entorno,
+/// realizar subidas multipart de imágenes/videos y generar URLs pre-firmadas (Presigned URLs)
+/// temporales con firmas criptográficas válidas por 1 hora para permitir descargas directas.
+///
+/// Sustentación Científica:
+/// El uso de Presigned URLs es un patrón de diseño crítico para mitigar el cuello de botella
+/// de red en el API Gateway. Permite descargar assets binarios pesados (.glb, .mp4)
+/// directamente desde el almacenamiento MinIO de forma segura y autorizada.
+///
+/// Acciones Principales:
+///     - Inicializar el cliente S3 compatible con MinIO usando AWS SDK.
+///     - Subir búferes de bytes (imágenes, videos) de forma asíncrona.
+///     - Generar URLs pre-firmadas ('Presigned GET URL') que expiran en 3600 segundos.
+///
+/// Entradas / Dependencias:
+///     - Crate aws-config, aws-sdk-s3, aws-credential-types, anyhow.
+///     - Variables de entorno: MINIO_ENDPOINT, MINIO_ACCESS_KEY, MINIO_SECRET_KEY.
+///
+/// Salidas / Efectos:
+///     - Binarios transferidos de forma exitosa a MinIO.
+///     - Retorna cadenas URI firmadas.
+use anyhow::{Context, Result};
+use aws_config::BehaviorVersion;
+use aws_sdk_s3::primitives::ByteStream;
+use aws_sdk_s3::presigning::PresigningConfig;
+use std::env;
+use std::time::Duration;
+
+#[derive(Clone)]
+pub struct MinioClient {
+    client: aws_sdk_s3::Client,
+    bucket: String,
+}
+
+impl MinioClient {
+    /// Inicializa un nuevo cliente de S3 configurado para MinIO.
+    pub async fn new() -> Self {
+        let endpoint = env::var("MINIO_ENDPOINT").unwrap_or_else(|_| "http://localhost:9000".to_string());
+        let access_key = env::var("MINIO_ACCESS_KEY").unwrap_or_else(|_| "biorenderadmin".to_string());
+        let secret_key = env::var("MINIO_SECRET_KEY").unwrap_or_else(|_| "biorendersecret".to_string());
+        let bucket = env::var("MINIO_BUCKET").unwrap_or_else(|_| "biorender-assets".to_string());
+
+        let credentials = aws_credential_types::Credentials::new(
+            access_key,
+            secret_key,
+            None,
+            None,
+            "Static",
+        );
+
+        let config = aws_config::defaults(BehaviorVersion::latest())
+            .credentials_provider(credentials)
+            .endpoint_url(endpoint)
+            .region(aws_config::Region::new("us-east-1"))
+            .load()
+            .await;
+
+        let client = aws_sdk_s3::Client::new(&config);
+
+        Self { client, bucket }
+    }
+
+    /// Sube un archivo binario (búfer de bytes) a una ruta (Key) del bucket.
+    pub async fn upload_file(&self, key: &str, data: Vec<u8>, content_type: &str) -> Result<()> {
+        let body = ByteStream::from(data);
+        self.client
+            .put_object()
+            .bucket(&self.bucket)
+            .key(key)
+            .body(body)
+            .content_type(content_type)
+            .send()
+            .await
+            .context("Error al subir objeto binario a MinIO/S3")?;
+        Ok(())
+    }
+
+    /// Genera una URL de descarga pre-firmada (Presigned GET) válida por 1 hora.
+    pub async fn generate_presigned_get_url(&self, key: &str) -> Result<String> {
+        let expires_in = Duration::from_secs(3600); // 1 hora
+        let presigned_req = self.client
+            .get_object()
+            .bucket(&self.bucket)
+            .key(key)
+            .presigned(PresigningConfig::expires_in(expires_in).context("Fallo al configurar expiración CORS en firma S3")?)
+            .await
+            .context("Error al generar firma criptográfica del objeto S3")?;
+        
+        Ok(presigned_req.uri().to_string())
+    }
+}
