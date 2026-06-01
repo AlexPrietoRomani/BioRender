@@ -28,12 +28,17 @@ pub async fn get_job_status_handler(
     State(state): State<Arc<AppState>>,
     Path(job_id): Path<String>,
 ) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
+    let start_time = std::time::Instant::now();
     tracing::info!("Consultando estado del Job ID: {}", job_id);
 
-    match state.job_tracker.get_job_status(&job_id).await {
+    let redis_start = std::time::Instant::now();
+    let res = match state.job_tracker.get_job_status(&job_id).await {
         Ok(Some(mut job_status)) => {
+            let redis_dur = redis_start.elapsed().as_millis();
+            let mut presign_dur = 0;
             // Si el estado es "done" y tenemos una key de S3, generamos la URL firmada al vuelo
             if job_status.status == "done" && !job_status.result_url.is_empty() && !job_status.result_url.starts_with("http") {
+                let presign_start = std::time::Instant::now();
                 let s3_key = if job_status.result_url.starts_with("biorender-assets/") {
                     job_status.result_url.replacen("biorender-assets/", "", 1)
                 } else {
@@ -49,9 +54,23 @@ pub async fn get_job_status_handler(
                         // No fallamos la petición completa, pero logueamos la advertencia
                     }
                 }
+                presign_dur = presign_start.elapsed().as_millis();
             }
 
-            Ok(Json(job_status))
+            let total_dur = start_time.elapsed().as_millis();
+            tracing::info!(
+                "[PERF_LOG] Handler: get_job_status_handler | Redis query: {}ms | Presign S3: {}ms | Duracion Total: {}ms",
+                redis_dur, presign_dur, total_dur
+            );
+
+            Ok(Json(serde_json::json!({
+                "job_id": job_id,
+                "status": job_status.status,
+                "progress": job_status.progress,
+                "result_url": job_status.result_url,
+                "error_message": job_status.error_message,
+                "duration_ms": total_dur
+            })))
         }
         Ok(None) => {
             tracing::warn!("Job {} no encontrado en Redis.", job_id);
@@ -71,5 +90,6 @@ pub async fn get_job_status_handler(
                 })),
             ))
         }
-    }
+    };
+    res
 }

@@ -158,6 +158,7 @@ def extract_motion(payload: Dict[str, Any]) -> Dict[str, Any]:
     Returns:
         dict: Estado del Job y clave del archivo BVH resultante en MinIO.
     """
+    start_time = time.perf_counter()
     job_id = payload.get("job_id")
     avatar_glb_key = payload.get("avatar_glb_key")
     video_key = payload.get("video_key")
@@ -171,21 +172,28 @@ def extract_motion(payload: Dict[str, Any]) -> Dict[str, Any]:
     
     try:
         # 1. Cargar el pipeline de WHAM
+        pipeline_start = time.perf_counter()
         pipeline = load_wham_pipeline()
+        pipeline_dur = int((time.perf_counter() - pipeline_start) * 1000)
         
         # 2. Descargar el archivo de video desde MinIO
+        s3_download_start = time.perf_counter()
         s3_client.download_file(BUCKET_NAME, video_key, temp_video_path)
         print(f"[+] Video descargado a archivo temporal local: {temp_video_path}")
+        s3_download_dur = int((time.perf_counter() - s3_download_start) * 1000)
         
         # 3. Decodificar frames del video usando OpenCV
+        decode_start = time.perf_counter()
         cap = cv2.VideoCapture(temp_video_path)
         frames_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
         fps = cap.get(cv2.CAP_PROP_FPS)
         print(f"[*] Video decodificado: {frames_count} frames totales a {fps:.2f} FPS.")
+        decode_dur = int((time.perf_counter() - decode_start) * 1000)
         
         bvh_content = ""
         
         # 4. Procesar estimación de pose
+        pose_start = time.perf_counter()
         if pipeline == "mock_wham_pipeline":
             print("[*] Ejecutando estimación cinemática MediaPipe Pose en CPU (CPU Fallback)...")
             try:
@@ -295,10 +303,12 @@ def extract_motion(payload: Dict[str, Any]) -> Dict[str, Any]:
             # Se aplica savgol_filter sobre las rotaciones para eliminar ruidos de jittering:
             # rotaciones_suaves = savgol_filter(rotaciones, window_length=5, polyorder=2, axis=0)
             bvh_content = generate_mock_bvh_content(frames_count if frames_count > 0 else 150)
+        pose_dur = int((time.perf_counter() - pose_start) * 1000)
             
         cap.release()
         
         # 5. Subir el archivo motion.bvh a MinIO
+        s3_upload_start = time.perf_counter()
         bvh_key = f"uploads/{job_id}/animation/motion.bvh"
         s3_client.put_object(
             Bucket=BUCKET_NAME,
@@ -307,12 +317,19 @@ def extract_motion(payload: Dict[str, Any]) -> Dict[str, Any]:
             ContentType="text/plain"
         )
         print(f"[+] Animación BVH resultante subida a: {bvh_key}")
+        s3_upload_dur = int((time.perf_counter() - s3_upload_start) * 1000)
+        
+        total_dur = int((time.perf_counter() - start_time) * 1000)
+        print(
+            f"[PERF_LOG] Task: extract_motion | Cargar Pipeline: {pipeline_dur}ms | Descarga Video S3: {s3_download_dur}ms | Decodificar Video: {decode_dur}ms | MediaPipe Inferencia: {pose_dur}ms | Subida BVH S3: {s3_upload_dur}ms | Duracion Total: {total_dur}ms"
+        )
         
         # 6. Encadenar la tarea de renderizado en Blender Headless (Sub Fase 2.2)
         render_payload = {
             "job_id": job_id,
             "avatar_glb_key": avatar_glb_key,
-            "bvh_key": bvh_key
+            "bvh_key": bvh_key,
+            "motion_extraction_duration_ms": total_dur
         }
         
         celery_app.send_task(
@@ -325,7 +342,8 @@ def extract_motion(payload: Dict[str, Any]) -> Dict[str, Any]:
         return {
             "status": "success",
             "job_id": job_id,
-            "bvh_key": bvh_key
+            "bvh_key": bvh_key,
+            "duration_ms": total_dur
         }
         
     except Exception as err:

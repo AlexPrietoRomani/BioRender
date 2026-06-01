@@ -22,7 +22,7 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 use axum::{
     routing::{get, post},
-    Router,
+    Json, Router,
 };
 use tower_http::cors::CorsLayer;
 use reqwest::Client;
@@ -66,6 +66,7 @@ async fn main() {
 
     // Configurar rutas de Axum
     let app = Router::new()
+        .route("/", get(welcome_handler))
         .route("/health", get(health_check))
         .route("/ws/live-pose", get(ws_handler))
         .route("/api/generate-3d", post(routes::generate_3d::generate_3d_handler))
@@ -87,4 +88,21 @@ async fn main() {
 /// Retorna un string plano confirmando que el orquestador está activo.
 async fn health_check() -> &'static str {
     "BioRender Rust API Gateway - ACTIVO"
+}
+
+/// Manejador de bienvenida para la ruta raíz, evitando el 404 en el navegador.
+async fn welcome_handler() -> Json<serde_json::Value> {
+    Json(serde_json::json!({
+        "status": "online",
+        "service": "BioRender API Gateway",
+        "version": "1.0.0",
+        "endpoints": {
+            "root": "/",
+            "health": "/health",
+            "websocket_pose": "/ws/live-pose",
+            "generate_3d": "/api/generate-3d",
+            "process_video": "/api/process-video",
+            "job_status": "/api/jobs/:id"
+        }
+    }))
 }

@@ -125,9 +125,13 @@ celery -A worker worker --loglevel=info --queues=motion
 ### 3.3 Puertos y Accesos Locales
 
 *   **Frontend (Astro Web App):** [http://localhost:4321](http://localhost:4321)
-*   **API Gateway (Rust HTTP/WS):** [http://localhost:8080](http://localhost:8080)
+*   **API Gateway (Rust HTTP/WS):** [http://localhost:8080](http://localhost:8080) (Muestra estado de diagnóstico y endpoints al acceder a la raíz `/`)
 *   **Pose Inferencia API (FastAPI):** [http://localhost:8001](http://localhost:8001)
 *   **Documentación API (Swagger):** [http://localhost:8001/docs](http://localhost:8001/docs)
+*   **MinIO Console (Object Storage Console):** [http://localhost:9001](http://localhost:9001)
+    *   *Usuario:* `biorenderadmin`
+    *   *Contraseña:* `biorendersecret`
+    *   *Bucket:* `biorender-assets` (Almacena avatares GLB y videos MP4, auto-creado por el Gateway en el arranque)
 
 ### 3.4 Checklist de Verificación Rápida (Sanity Check)
 

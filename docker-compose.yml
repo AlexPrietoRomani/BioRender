@@ -17,9 +17,12 @@ services:
       - MINIO_ACCESS_KEY=biorenderadmin
       - MINIO_SECRET_KEY=biorendersecret
     depends_on:
-      - pose-rt
-      - redis
-      - minio
+      pose-rt:
+        condition: service_started
+      redis:
+        condition: service_started
+      minio:
+        condition: service_healthy
     deploy:
       resources:
         limits:
@@ -79,6 +82,12 @@ services:
     volumes:
       - minio_data:/data
     command: server /data --console-address ":9001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
     deploy:
       resources:
         limits:

@@ -1,4 +1,5 @@
 import React, { useState, useRef } from 'react';
+import { useSessionStore, type AvatarItem } from './sessionStore';
 
 interface ImageUploaderProps {
   /**
@@ -16,7 +17,9 @@ interface JobState {
 }
 
 export const ImageUploader: React.FC<ImageUploaderProps> = ({ onGenerationComplete }) => {
+  const { addAvatar, avatarsList } = useSessionStore();
   const [file, setFile] = useState<File | null>(null);
+  const [avatarName, setAvatarName] = useState<string>('');
   const [dragActive, setDragActive] = useState<boolean>(false);
   const [uploading, setUploading] = useState<boolean>(false);
   const [jobState, setJobState] = useState<JobState>({
@@ -27,6 +30,9 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({ onGenerationComple
   });
   const [terminalLogs, setTerminalLogs] = useState<string[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  
+  // Guardar el tiempo de inicio para el cronometraje total
+  const totalStartTimeRef = useRef<number>(0);
 
   const gatewayHttpUrl = import.meta.env.PUBLIC_GATEWAY_HTTP_URL || 'http://localhost:8080';
 
@@ -89,6 +95,9 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({ onGenerationComple
     const formData = new FormData();
     formData.append('image', file);
 
+    const uploadStart = performance.now();
+    totalStartTimeRef.current = performance.now();
+
     try {
       addLog(`Subiendo archivo al API Gateway en ${gatewayHttpUrl}/api/generate-3d...`);
       const res = await fetch(`${gatewayHttpUrl}/api/generate-3d`, {
@@ -103,7 +112,9 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({ onGenerationComple
 
       const data = await res.json();
       const jobId = data.job_id;
+      const uploadDuration = performance.now() - uploadStart;
 
+      addLog(`[PERF_LOG] Subida completada con éxito (Duración: ${uploadDuration.toFixed(0)}ms)`);
       addLog(`¡Subida exitosa! Job ID asignado: ${jobId}`);
       addLog(`Estado inicial registrado: ${data.status}`);
       
@@ -149,8 +160,9 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({ onGenerationComple
 
         if (status === 'done' || status === 'success') {
           clearInterval(intervalId);
+          const totalDuration = performance.now() - totalStartTimeRef.current;
           addLog("¡PROCESAMIENTO FINALIZADO CON ÉXITO!");
-          addLog(`Generando Presigned URL para descarga segura...`);
+          addLog(`[PERF_LOG] Tiempo Total de Compilación: ${totalDuration.toFixed(0)}ms`);
           addLog(`Modelo GLB cargado correctamente.`);
 
           setJobState({
@@ -160,6 +172,15 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({ onGenerationComple
             jobId
           });
           setUploading(false);
+          
+          const finalName = avatarName.trim() || `Avatar Alfa ${avatarsList.length + 1}`;
+          const newAvatar: AvatarItem = {
+            id: jobId,
+            name: finalName,
+            url: data.result_url,
+            createdAt: Date.now()
+          };
+          addAvatar(newAvatar);
           
           // Notificar al padre la URL del GLB para cargarlo en Three.js
           onGenerationComplete(data.result_url, jobId);
@@ -196,6 +217,29 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({ onGenerationComple
       <h3 style={{ fontSize: '0.85rem', color: '#00f07f', fontFamily: 'var(--font-mono)', letterSpacing: '0.05em' }}>
         &gt; PIPELINE_A: IMAGE_TO_3D
       </h3>
+
+      {/* Nombre del Avatar */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+        <label style={{ fontSize: '0.65rem', color: '#8e8e8e', fontFamily: 'var(--font-mono)' }}>NOMBRE DEL AVATAR:</label>
+        <input
+          type="text"
+          value={avatarName}
+          onChange={(e) => setAvatarName(e.target.value)}
+          placeholder="ej. Guerrero Neon"
+          disabled={uploading}
+          style={{
+            background: '#0a0a0c',
+            border: '2px solid #1b1b22',
+            color: '#f5f5f5',
+            padding: '0.5rem',
+            fontFamily: 'var(--font-mono)',
+            fontSize: '0.8rem',
+            outline: 'none',
+            width: '100%',
+            boxSizing: 'border-box'
+          }}
+        />
+      </div>
 
       {/* Área de arrastrar y soltar */}
       <div
@@ -296,7 +340,7 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({ onGenerationComple
           >
             {terminalLogs.map((log, idx) => (
               <div key={idx} style={{ 
-                color: log.includes('ERROR') ? '#ff3333' : log.includes('SUCCESS') || log.includes('FINALIZADO') ? '#00f07f' : '#d5d5d5',
+                color: log.includes('ERROR') ? '#ff3333' : log.includes('SUCCESS') || log.includes('FINALIZADO') || log.includes('[PERF_LOG]') ? '#00f07f' : '#d5d5d5',
                 wordBreak: 'break-all'
               }}>
                 {log}

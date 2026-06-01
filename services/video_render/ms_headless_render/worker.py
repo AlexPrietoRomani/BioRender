@@ -100,9 +100,11 @@ def render_blender(payload: Dict[str, Any]) -> Dict[str, Any]:
     Returns:
         dict: Estado del Job y la clave del video resultante en MinIO.
     """
+    start_time = time.perf_counter()
     job_id = payload.get("job_id")
     glb_key = payload.get("avatar_glb_key")
     bvh_key = payload.get("bvh_key")
+    motion_dur = payload.get("motion_extraction_duration_ms", 0)
     
     if not job_id or not glb_key or not bvh_key:
         raise ValueError("Payload de renderizado incompleto: faltan parámetros clave.")
@@ -116,11 +118,13 @@ def render_blender(payload: Dict[str, Any]) -> Dict[str, Any]:
     
     try:
         # 1. Descargar recursos desde MinIO
+        s3_download_start = time.perf_counter()
         s3_client.download_file(BUCKET_NAME, glb_key, local_glb)
         print(f"[+] Avatar GLB descargado localmente a: {local_glb}")
         
         s3_client.download_file(BUCKET_NAME, bvh_key, local_bvh)
         print(f"[+] Animacion BVH descargada localmente a: {local_bvh}")
+        s3_download_dur = int((time.perf_counter() - s3_download_start) * 1000)
         
         # Actualizar estado a procesando con progreso intermedio (ej. 75%)
         status_update = {
@@ -132,6 +136,7 @@ def render_blender(payload: Dict[str, Any]) -> Dict[str, Any]:
         redis_client.set(f"job:status:{job_id}", json.dumps(status_update))
         
         # 2. Ejecutar Blender Headless
+        blender_start = time.perf_counter()
         command = [
             "blender",
             "--background",
@@ -168,7 +173,10 @@ def render_blender(payload: Dict[str, Any]) -> Dict[str, Any]:
             print("[*] Aplicando fallback y generando video simulado...")
             generate_mock_mp4_video(local_mp4)
             
+        blender_dur = int((time.perf_counter() - blender_start) * 1000)
+            
         # 3. Subir el video final .mp4 a MinIO
+        s3_upload_start = time.perf_counter()
         video_key = f"uploads/{job_id}/output/final_video.mp4"
         
         with open(local_mp4, "rb") as video_file:
@@ -179,12 +187,20 @@ def render_blender(payload: Dict[str, Any]) -> Dict[str, Any]:
                 ContentType="video/mp4"
             )
         print(f"[+] Video final .mp4 subido exitosamente a MinIO en: {video_key}")
+        s3_upload_dur = int((time.perf_counter() - s3_upload_start) * 1000)
+        
+        total_dur = int((time.perf_counter() - start_time) * 1000)
+        print(
+            f"[PERF_LOG] Task: render_blender | Descarga S3: {s3_download_dur}ms | Blender Headless Render: {blender_dur}ms | Subida S3 Video: {s3_upload_dur}ms | Duracion Total: {total_dur}ms"
+        )
         
         # 4. Actualizar el estado del Job en Redis a completado ('done') al 100%
         final_status = {
             "status": "done",
             "progress": 100,
             "result_url": f"{BUCKET_NAME}/{video_key}",
+            "duration_ms": total_dur,
+            "motion_extraction_duration_ms": motion_dur,
             "updated_at": int(time.time())
         }
         redis_client.set(f"job:status:{job_id}", json.dumps(final_status))
@@ -193,7 +209,8 @@ def render_blender(payload: Dict[str, Any]) -> Dict[str, Any]:
         return {
             "status": "success",
             "job_id": job_id,
-            "video_key": video_key
+            "video_key": video_key,
+            "duration_ms": total_dur
         }
         
     except Exception as err:

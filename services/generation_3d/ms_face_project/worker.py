@@ -349,6 +349,7 @@ def face_project(payload: Dict[str, Any]) -> Dict[str, Any]:
     Tarea Celery que descarga la foto de la cara, detecta los contornos faciales,
     genera el avatar rigged personalizado en GLB, lo sube y actualiza Redis.
     """
+    start_time = time.perf_counter()
     job_id = payload.get("job_id")
     image_key = payload.get("input_image_key")
     
@@ -359,17 +360,24 @@ def face_project(payload: Dict[str, Any]) -> Dict[str, Any]:
     
     try:
         # 1. Descargar la imagen de entrada desde MinIO
+        s3_download_start = time.perf_counter()
         response = s3_client.get_object(Bucket=BUCKET_NAME, Key=image_key)
         input_data = response["Body"].read()
         input_image = Image.open(io.BytesIO(input_data)).convert("RGB")
+        s3_download_dur = int((time.perf_counter() - s3_download_start) * 1000)
         
         # 2. Alinear y recortar rostro
+        face_detect_start = time.perf_counter()
         face_img = detect_and_align_face(input_image)
+        face_detect_dur = int((time.perf_counter() - face_detect_start) * 1000)
         
         # 3. Compilar el GLB rigged procedimental
+        glb_compile_start = time.perf_counter()
         glb_data = compile_procedural_glb(face_img)
+        glb_compile_dur = int((time.perf_counter() - glb_compile_start) * 1000)
         
         # 4. Subir el avatar GLB a MinIO
+        s3_upload_start = time.perf_counter()
         glb_key = f"uploads/{job_id}/final/avatar.glb"
         s3_client.put_object(
             Bucket=BUCKET_NAME,
@@ -378,12 +386,19 @@ def face_project(payload: Dict[str, Any]) -> Dict[str, Any]:
             ContentType="model/gltf-binary"
         )
         print(f"[+] Avatar GLB subido a: {glb_key}")
+        s3_upload_dur = int((time.perf_counter() - s3_upload_start) * 1000)
+        
+        total_dur = int((time.perf_counter() - start_time) * 1000)
+        print(
+            f"[PERF_LOG] Task: face_project | Descarga S3: {s3_download_dur}ms | Deteccion/Alineacion FaceMesh: {face_detect_dur}ms | Compilacion GLB: {glb_compile_dur}ms | Subida S3: {s3_upload_dur}ms | Duracion Total: {total_dur}ms"
+        )
         
         # 5. Actualizar el estado del Job en Redis a 'done' compatible con el Gateway
         status_update = {
             "status": "done",
             "progress": 100,
             "result_url": f"{BUCKET_NAME}/{glb_key}",
+            "duration_ms": total_dur,
             "updated_at": int(time.time())
         }
         
@@ -394,7 +409,8 @@ def face_project(payload: Dict[str, Any]) -> Dict[str, Any]:
         return {
             "status": "success",
             "job_id": job_id,
-            "glb_key": glb_key
+            "glb_key": glb_key,
+            "duration_ms": total_dur
         }
         
     except Exception as err:

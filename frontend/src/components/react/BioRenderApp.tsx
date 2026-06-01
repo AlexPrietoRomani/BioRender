@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useWebSocket } from '../../hooks/useWebSocket';
 import type { BoneRotation } from '../../hooks/useWebSocket';
 import { LiveCamera } from './LiveCamera';
@@ -72,6 +72,7 @@ type TabType = 'realtime' | 'generation' | 'retargeting';
 const BioRenderMain: React.FC = () => {
   const [activeTab, setActiveTab] = useState<TabType>('realtime');
   const [boneRotations, setBoneRotations] = useState<BoneRotation[]>([]);
+  const [selectedLiveAvatarId, setSelectedLiveAvatarId] = useState<string>('procedural');
   
   // Consumir el estado global reactivo de Zustand
   const {
@@ -80,8 +81,16 @@ const BioRenderMain: React.FC = () => {
     renderedVideoUrl,
     videoJobId,
     setAvatar,
-    setVideo
+    setVideo,
+    avatarsList
   } = useSessionStore();
+
+  // Si se genera un avatar nuevo, auto-seleccionarlo en el stream en vivo
+  useEffect(() => {
+    if (avatarJobId) {
+      setSelectedLiveAvatarId(avatarJobId);
+    }
+  }, [avatarJobId]);
 
   // Obtener URL de WebSocket de las variables de entorno
   const wsUrl = import.meta.env.PUBLIC_GATEWAY_WS_URL || 'ws://localhost:8080/ws/live-pose';
@@ -134,26 +143,58 @@ const BioRenderMain: React.FC = () => {
       
       {/* 1. MODO: STREAM EN VIVO (Realtime WebSocket) */}
       {activeTab === 'realtime' && (
-        <div style={{ display: 'flex', gap: '2rem', flexWrap: 'wrap', width: '100%' }}>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-            <LiveCamera sendMessage={sendMessage} isConnected={isConnected} />
-            
-            {/* Panel de estado */}
-            <div className="panel-terminal" style={{ width: '320px', fontSize: '0.75rem', color: '#8e8e8e' }}>
-              <h3 style={{ fontSize: '0.8rem', color: '#f5f5f5', marginBottom: '0.5rem', fontFamily: 'var(--font-mono)' }}>
-                &gt; SYSTEM_METRICS (RT)
-              </h3>
-              <p style={{ margin: '0.25rem 0' }}>• TARGET_LATENCY: &lt; 50ms</p>
-              <p style={{ margin: '0.25rem 0' }}>• MODEL: MediaPipe Pose CPU Fallback</p>
-              <p style={{ margin: '0.25rem 0' }}>• proxy_cam_socket: Active (Axum/Tokio)</p>
-              <p style={{ margin: '0.25rem 0', color: isConnected ? '#00f07f' : '#ff3333', fontWeight: 'bold' }}>
-                • GATEWAY_LINK: {isConnected ? 'ONLINE_READY' : 'OFFLINE_RETRY'}
-              </p>
-            </div>
-          </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', width: '100%' }}>
           
-          <div style={{ flex: 1, display: 'flex' }}>
-            <Viewer3D boneRotations={boneRotations} modelUrl={activeAvatarUrl} />
+          {/* Selector de actor en vivo */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', background: '#0a0a0c', border: '2px solid #1b1b22', padding: '0.75rem', width: '100%' }}>
+            <label style={{ fontSize: '0.7rem', color: '#8e8e8e', fontFamily: 'var(--font-mono)', fontWeight: 'bold' }}>[SELECT_ACTOR] MODELO ACTIVO EN EL VISOR:</label>
+            <select
+              value={selectedLiveAvatarId}
+              onChange={(e) => setSelectedLiveAvatarId(e.target.value)}
+              style={{
+                background: '#050507',
+                border: '1px solid #2e2e2e',
+                color: '#00f07f',
+                padding: '0.4rem 0.8rem',
+                fontSize: '0.75rem',
+                fontFamily: 'var(--font-mono)',
+                outline: 'none',
+                cursor: 'pointer'
+              }}
+            >
+              <option value="procedural">Esqueleto Procedimental Cyberpunk</option>
+              {avatarsList.map((avatar) => (
+                <option key={avatar.id} value={avatar.id}>
+                  {avatar.name} ({avatar.id.slice(0, 8)}...)
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div style={{ display: 'flex', gap: '2rem', flexWrap: 'wrap', width: '100%' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+              <LiveCamera sendMessage={sendMessage} isConnected={isConnected} />
+              
+              {/* Panel de estado */}
+              <div className="panel-terminal" style={{ width: '320px', fontSize: '0.75rem', color: '#8e8e8e' }}>
+                <h3 style={{ fontSize: '0.8rem', color: '#f5f5f5', marginBottom: '0.5rem', fontFamily: 'var(--font-mono)' }}>
+                  &gt; SYSTEM_METRICS (RT)
+                </h3>
+                <p style={{ margin: '0.25rem 0' }}>• TARGET_LATENCY: &lt; 50ms</p>
+                <p style={{ margin: '0.25rem 0' }}>• MODEL: MediaPipe Pose CPU Fallback</p>
+                <p style={{ margin: '0.25rem 0' }}>• proxy_cam_socket: Active (Axum/Tokio)</p>
+                <p style={{ margin: '0.25rem 0', color: isConnected ? '#00f07f' : '#ff3333', fontWeight: 'bold' }}>
+                  • GATEWAY_LINK: {isConnected ? 'ONLINE_READY' : 'OFFLINE_RETRY'}
+                </p>
+              </div>
+            </div>
+            
+            <div style={{ flex: 1, display: 'flex' }}>
+              <Viewer3D 
+                boneRotations={boneRotations} 
+                modelUrl={selectedLiveAvatarId === 'procedural' ? null : avatarsList.find(a => a.id === selectedLiveAvatarId)?.url || null} 
+              />
+            </div>
           </div>
         </div>
       )}

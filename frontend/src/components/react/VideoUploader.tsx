@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { useSessionStore } from './sessionStore';
 
 interface VideoUploaderProps {
   /**
@@ -20,6 +21,7 @@ interface JobState {
 }
 
 export const VideoUploader: React.FC<VideoUploaderProps> = ({ defaultAvatarJobId = null, onRetargetingComplete }) => {
+  const { avatarsList, activeAvatarUrl } = useSessionStore();
   const [file, setFile] = useState<File | null>(null);
   const [avatarJobId, setAvatarJobId] = useState<string>('');
   const [dragActive, setDragActive] = useState<boolean>(false);
@@ -33,14 +35,25 @@ export const VideoUploader: React.FC<VideoUploaderProps> = ({ defaultAvatarJobId
   const [terminalLogs, setTerminalLogs] = useState<string[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Guardar el tiempo de inicio para el cronometraje total
+  const totalStartTimeRef = useRef<number>(0);
+
   const gatewayHttpUrl = import.meta.env.PUBLIC_GATEWAY_HTTP_URL || 'http://localhost:8080';
 
+  // Si cambia el listado de avatares y no tenemos uno seleccionado, autoseleccionar el primero
   useEffect(() => {
-    if (defaultAvatarJobId) {
-      setAvatarJobId(defaultAvatarJobId);
-      addLog(`Auto-completado ID de avatar de sesión: ${defaultAvatarJobId}`);
+    if (avatarsList.length > 0) {
+      // Si hay un defaultAvatarJobId preferimos ese, sino el último en la lista
+      const match = avatarsList.find(a => a.id === defaultAvatarJobId);
+      if (match) {
+        setAvatarJobId(match.id);
+      } else if (!avatarJobId || !avatarsList.some(a => a.id === avatarJobId)) {
+        setAvatarJobId(avatarsList[avatarsList.length - 1].id);
+      }
+    } else {
+      setAvatarJobId('');
     }
-  }, [defaultAvatarJobId]);
+  }, [avatarsList, defaultAvatarJobId]);
 
   const addLog = (msg: string) => {
     const timestamp = new Date().toLocaleTimeString();
@@ -93,20 +106,24 @@ export const VideoUploader: React.FC<VideoUploaderProps> = ({ defaultAvatarJobId
 
   const startRetargeting = async () => {
     if (!file) return;
-    if (!avatarJobId.trim()) {
-      addLog("ERROR: Debe ingresar el ID de un avatar para realizar el retargeting.");
+    if (!avatarJobId) {
+      addLog("ERROR: Debe seleccionar un avatar de destino para realizar el retargeting.");
       return;
     }
 
     setUploading(true);
     setTerminalLogs([]);
     addLog("Iniciando Pipeline B: Extracción de Pose y Render Headless...");
-    addLog(`ID de Avatar asignado para retargeting: ${avatarJobId.trim()}`);
+    const selectedAvatar = avatarsList.find(a => a.id === avatarJobId);
+    addLog(`Avatar Destino: ${selectedAvatar ? selectedAvatar.name : avatarJobId} (${avatarJobId})`);
     addLog("Preparando carga multipart...");
 
     const formData = new FormData();
     formData.append('video', file);
     formData.append('avatar_job_id', avatarJobId.trim());
+
+    const uploadStart = performance.now();
+    totalStartTimeRef.current = performance.now();
 
     try {
       addLog(`Subiendo video a MinIO mediante Gateway en ${gatewayHttpUrl}/api/process-video...`);
@@ -122,7 +139,9 @@ export const VideoUploader: React.FC<VideoUploaderProps> = ({ defaultAvatarJobId
 
       const data = await res.json();
       const jobId = data.job_id;
+      const uploadDuration = performance.now() - uploadStart;
 
+      addLog(`[PERF_LOG] Subida de video completada (Duración: ${uploadDuration.toFixed(0)}ms)`);
       addLog(`¡Video almacenado con éxito! Job ID asignado: ${jobId}`);
       addLog("Tarea de extracción encolada en Celery (cola: 'motion').");
       
@@ -166,7 +185,9 @@ export const VideoUploader: React.FC<VideoUploaderProps> = ({ defaultAvatarJobId
 
         if (status === 'done' || status === 'success') {
           clearInterval(intervalId);
+          const totalDuration = performance.now() - totalStartTimeRef.current;
           addLog("¡PROCESAMIENTO DE RETARGETING Y RENDERIZADO COMPLETADO!");
+          addLog(`[PERF_LOG] Tiempo Total del Render: ${totalDuration.toFixed(0)}ms`);
           addLog("Generando URL pre-firmada del video renderizado en Blender Eevee...");
 
           setJobState({
@@ -206,33 +227,54 @@ export const VideoUploader: React.FC<VideoUploaderProps> = ({ defaultAvatarJobId
     }, 3000);
   };
 
+  const hasAvatars = avatarsList.length > 0;
+
   return (
     <div className="panel-terminal" style={{ width: '100%', maxWidth: '480px', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
       <h3 style={{ fontSize: '0.85rem', color: '#00f07f', fontFamily: 'var(--font-mono)', letterSpacing: '0.05em' }}>
         &gt; PIPELINE_B: VIDEO_RETARGETING
       </h3>
 
-      {/* Entrada del ID del Avatar */}
+      {/* Selector del Avatar */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
-        <label style={{ fontSize: '0.65rem', color: '#8e8e8e', fontFamily: 'var(--font-mono)' }}>AVATAR_JOB_ID (DESTINO):</label>
-        <input
-          type="text"
-          value={avatarJobId}
-          onChange={(e) => setAvatarJobId(e.target.value)}
-          placeholder="Ingrese el UUID del avatar 3D generado..."
-          disabled={uploading}
-          style={{
-            background: '#0a0a0c',
-            border: '2px solid #1b1b22',
-            color: '#f5f5f5',
-            padding: '0.5rem',
-            fontSize: '0.75rem',
+        <label style={{ fontSize: '0.65rem', color: '#8e8e8e', fontFamily: 'var(--font-mono)' }}>SELECCIONAR AVATAR DESTINO:</label>
+        {hasAvatars ? (
+          <select
+            value={avatarJobId}
+            onChange={(e) => setAvatarJobId(e.target.value)}
+            disabled={uploading}
+            style={{
+              background: '#0a0a0c',
+              border: '2px solid #1b1b22',
+              color: '#f5f5f5',
+              padding: '0.5rem',
+              fontSize: '0.8rem',
+              fontFamily: 'var(--font-mono)',
+              outline: 'none',
+              width: '100%',
+              boxSizing: 'border-box',
+              cursor: 'pointer'
+            }}
+          >
+            {avatarsList.map((avatar) => (
+              <option key={avatar.id} value={avatar.id}>
+                {avatar.name} ({avatar.id.slice(0, 8)}...)
+              </option>
+            ))}
+          </select>
+        ) : (
+          <div style={{
+            padding: '0.75rem',
+            background: '#ff333315',
+            border: '2px solid #ff3333',
+            color: '#ff3333',
+            fontSize: '0.7rem',
             fontFamily: 'var(--font-mono)',
-            outline: 'none',
-            transition: 'border-color 0.2s',
-            width: '100%'
-          }}
-        />
+            lineHeight: '1.4'
+          }}>
+            [ALERTA SISTEMA] No hay avatares creados en esta sesión. Primero debes ir a la pestaña "Compilar Avatar" y crear al menos un personaje 3D con rostro para poder animarlo aquí.
+          </div>
+        )}
       </div>
 
       {/* Área de arrastrar y soltar */}
@@ -247,9 +289,10 @@ export const VideoUploader: React.FC<VideoUploaderProps> = ({ defaultAvatarJobId
           background: dragActive ? '#00f07f08' : '#0a0a0c',
           padding: '2rem 1rem',
           textAlign: 'center',
-          cursor: uploading ? 'not-allowed' : 'pointer',
+          cursor: (!hasAvatars || uploading) ? 'not-allowed' : 'pointer',
           transition: 'all 0.2s ease',
-          pointerEvents: uploading ? 'none' : 'auto'
+          pointerEvents: (!hasAvatars || uploading) ? 'none' : 'auto',
+          opacity: hasAvatars ? 1 : 0.4
         }}
       >
         <input
@@ -258,6 +301,7 @@ export const VideoUploader: React.FC<VideoUploaderProps> = ({ defaultAvatarJobId
           accept="video/*"
           onChange={handleChange}
           style={{ display: 'none' }}
+          disabled={!hasAvatars}
         />
         
         {file ? (
@@ -281,7 +325,7 @@ export const VideoUploader: React.FC<VideoUploaderProps> = ({ defaultAvatarJobId
         )}
       </div>
 
-      {file && !uploading && jobState.status === 'idle' && (
+      {file && !uploading && jobState.status === 'idle' && hasAvatars && (
         <button
           className="btn-retro"
           onClick={startRetargeting}
@@ -333,7 +377,7 @@ export const VideoUploader: React.FC<VideoUploaderProps> = ({ defaultAvatarJobId
           >
             {terminalLogs.map((log, idx) => (
               <div key={idx} style={{ 
-                color: log.includes('ERROR') ? '#ff3333' : log.includes('SUCCESS') || log.includes('FINALIZADO') ? '#00f07f' : '#d5d5d5',
+                color: log.includes('ERROR') ? '#ff3333' : log.includes('SUCCESS') || log.includes('FINALIZADO') || log.includes('[PERF_LOG]') ? '#00f07f' : '#d5d5d5',
                 wordBreak: 'break-all'
               }}>
                 {log}

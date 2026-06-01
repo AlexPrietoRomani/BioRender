@@ -1,4 +1,12 @@
 import { create } from 'zustand';
+import { persist, createJSONStorage } from 'zustand/middleware';
+
+export interface AvatarItem {
+  id: string;
+  name: string;
+  url: string;
+  createdAt: number;
+}
 
 interface SessionState {
   /**
@@ -17,33 +25,58 @@ interface SessionState {
    * UUID del Job de procesamiento y retargeting de video.
    */
   videoJobId: string | null;
+  /**
+   * Colección de avatares creados y nombrados en esta sesión.
+   */
+  avatarsList: AvatarItem[];
 
   // Acciones para actualizar el estado global
   setAvatar: (url: string, jobId: string) => void;
   setVideo: (url: string, jobId: string) => void;
+  addAvatar: (avatar: AvatarItem) => void;
   resetSession: () => void;
 }
 
-export const useSessionStore = create<SessionState>((set) => ({
-  activeAvatarUrl: null,
-  avatarJobId: null,
-  renderedVideoUrl: null,
-  videoJobId: null,
+export const useSessionStore = create<SessionState>()(
+  persist(
+    (set) => ({
+      activeAvatarUrl: null,
+      avatarJobId: null,
+      renderedVideoUrl: null,
+      videoJobId: null,
+      avatarsList: [],
 
-  setAvatar: (url, jobId) => set({
-    activeAvatarUrl: url,
-    avatarJobId: jobId
-  }),
+      setAvatar: (url, jobId) => set({
+        activeAvatarUrl: url,
+        avatarJobId: jobId
+      }),
 
-  setVideo: (url, jobId) => set({
-    renderedVideoUrl: url,
-    videoJobId: jobId
-  }),
+      setVideo: (url, jobId) => set({
+        renderedVideoUrl: url,
+        videoJobId: jobId
+      }),
 
-  resetSession: () => set({
-    activeAvatarUrl: null,
-    avatarJobId: null,
-    renderedVideoUrl: null,
-    videoJobId: null
-  })
-}));
+      addAvatar: (avatar) => set((state) => {
+        const filtered = state.avatarsList.filter(a => a.id !== avatar.id);
+        return {
+          avatarsList: [...filtered, avatar],
+          activeAvatarUrl: avatar.url,
+          avatarJobId: avatar.id
+        };
+      }),
+
+      resetSession: () => set({
+        activeAvatarUrl: null,
+        avatarJobId: null,
+        renderedVideoUrl: null,
+        videoJobId: null,
+        avatarsList: []
+      })
+    }),
+    {
+      name: 'biorender-session-store',
+      storage: typeof window !== 'undefined' ? createJSONStorage(() => localStorage) : undefined,
+    }
+  )
+);
+
