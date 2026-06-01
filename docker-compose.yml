@@ -1,6 +1,25 @@
 name: biorender
 
 services:
+  # ── Frontend (Astro SSG + nginx) ──
+  frontend:
+    container_name: biorender-frontend
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        # El navegador del usuario accede al gateway por localhost; se bake en el build de Astro
+        PUBLIC_GATEWAY_HTTP_URL: http://localhost:8080
+    ports:
+      - "4321:80"
+    depends_on:
+      - gateway
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 128M
+
   # ── API Gateway (Rust Axum) ──
   gateway:
     container_name: biorender-gateway
