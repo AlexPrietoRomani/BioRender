@@ -144,59 +144,80 @@ def detect_and_align_face(input_img: Image.Image) -> Image.Image:
 def compile_procedural_glb(face_img: Image.Image) -> bytes:
     """
     Compila dinámicamente un archivo binario .glb completo y estructurado
-    que contiene un avatar humanoide tridimensional rigged de 25 huesos con la textura facial incrustada.
+    que contiene un avatar tridimensional representado como un plano vertical segmentado
+    (títere 2D rigged) con la textura completa incrustada y asociada al esqueleto.
 
     Args:
-        face_img (Image.Image): Imagen del rostro alineada para la textura.
+        face_img (Image.Image): Imagen completa del personaje para la textura.
 
     Returns:
         bytes: Datos binarios del archivo GLB.
     """
-    print("[*] Compilando procedimentalmente avatar GLB rigged compatible con WebGL...")
+    print("[*] Compilando procedimentalmente avatar 2D Puppet GLB rigged compatible con WebGL...")
     
-    # 1. Guardar la textura a bytes PNG
+    # 1. Ajustar tamaño y voltear la imagen verticalmente para WebGL/glTF
+    img_width, img_height = face_img.size
+    max_size = 512
+    if img_width > max_size or img_height > max_size:
+        face_img.thumbnail((max_size, max_size), Image.Resampling.LANCZOS)
+        img_width, img_height = face_img.size
+
+    flipped_img = face_img.transpose(Image.FLIP_TOP_BOTTOM)
+
+    # Guardar a bytes PNG
     texture_buffer = io.BytesIO()
-    face_img.save(texture_buffer, format="PNG")
+    flipped_img.save(texture_buffer, format="PNG")
     texture_bytes = texture_buffer.getvalue()
     
     # Alinear la textura a 4 bytes
     padding_len = (4 - (len(texture_bytes) % 4)) % 4
     texture_bytes += b'\x00' * padding_len
 
-    # 2. Definir geometría de vértices para un cuerpo humanoide minimalista
-    # Posición (x, y, z), Coordenada UV (u, v), Joints, Pesos de skinning
-    # Representaremos la cabeza con un cubo y el cuerpo con otro
+    # 2. Definir geometría de la malla: Tarjeta vertical segmentada en 4 secciones (5 niveles de altura)
+    # Conservamos la relación de aspecto original para evitar deformaciones
+    aspect_ratio = img_width / img_height
+    half_width = 0.4 * aspect_ratio
+
+    # Vértices: Posición (x, y, z), Coordenada UV (u, v)
     vertices = np.array([
-        # Vértices de la cabeza (cubo frontal con textura)
-        -0.2, 0.4, 0.2,   0.0, 0.0,
-        0.2, 0.4, 0.2,   1.0, 0.0,
-        0.2, 0.8, 0.2,   1.0, 1.0,
-        -0.2, 0.8, 0.2,   0.0, 1.0,
-        # Resto del cuerpo (atrás y lados de cabeza / torso)
-        -0.25, -0.6, 0.1,  0.5, 0.5,
-        0.25, -0.6, 0.1,  0.5, 0.5,
-        0.25, 0.3, 0.1,   0.5, 0.5,
-        -0.25, 0.3, 0.1,   0.5, 0.5,
+        # X, Y, Z, U, V
+        -half_width, -0.8, 0.0,   0.0, 0.0,   # V0
+         half_width, -0.8, 0.0,   1.0, 0.0,   # V1
+        -half_width, -0.3, 0.0,   0.0, 0.25,  # V2
+         half_width, -0.3, 0.0,   1.0, 0.25,  # V3
+        -half_width,  0.2, 0.0,   0.0, 0.5,   # V4
+         half_width,  0.2, 0.0,   1.0, 0.5,   # V5
+        -half_width,  0.7, 0.0,   0.0, 0.75,  # V6
+         half_width,  0.7, 0.0,   1.0, 0.75,  # V7
+        -half_width,  1.2, 0.0,   0.0, 1.0,   # V8
+         half_width,  1.2, 0.0,   1.0, 1.0,   # V9
     ], dtype=np.float32)
     
+    # Índices (2 triángulos por segmento vertical)
     indices = np.array([
-        0, 1, 2,  0, 2, 3,  # Cara con textura
-        4, 5, 6,  4, 6, 7,  # Cuerpo
+        0, 1, 3,  0, 3, 2,  # Segmento 0 (Asociado a Cadera)
+        2, 3, 5,  2, 5, 4,  # Segmento 1 (Asociado a Columna)
+        4, 5, 7,  4, 7, 6,  # Segmento 2 (Asociado a Columna superior/Hombros)
+        6, 7, 9,  6, 9, 8,  # Segmento 3 (Asociado a Cabeza)
     ], dtype=np.uint16)
     
-    # Mapeo de joints (0: Hips/Hueso 0, 1: Spine/Hueso 1, 2: Head/Hueso 2)
+    # Mapeo de joints (0: Hips, 1: Spine, 2: Head)
     joints = np.array([
-        2, 0, 0, 0,
-        2, 0, 0, 0,
-        2, 0, 0, 0,
-        2, 0, 0, 0,
-        0, 0, 0, 0,
-        0, 0, 0, 0,
-        1, 0, 0, 0,
-        1, 0, 0, 0,
+        0, 0, 0, 0,  # V0 (Hips)
+        0, 0, 0, 0,  # V1 (Hips)
+        0, 0, 0, 0,  # V2 (Hips)
+        0, 0, 0, 0,  # V3 (Hips)
+        1, 0, 0, 0,  # V4 (Spine)
+        1, 0, 0, 0,  # V5 (Spine)
+        2, 0, 0, 0,  # V6 (Head)
+        2, 0, 0, 0,  # V7 (Head)
+        2, 0, 0, 0,  # V8 (Head)
+        2, 0, 0, 0,  # V9 (Head)
     ], dtype=np.uint8)
 
     weights = np.array([
+        1.0, 0.0, 0.0, 0.0,
+        1.0, 0.0, 0.0, 0.0,
         1.0, 0.0, 0.0, 0.0,
         1.0, 0.0, 0.0, 0.0,
         1.0, 0.0, 0.0, 0.0,
@@ -237,26 +258,29 @@ def compile_procedural_glb(face_img: Image.Image) -> bytes:
     gltf_json = {
         "asset": {
             "version": "2.0",
-            "generator": "BioRender Fast-Track Builder"
+            "generator": "BioRender Puppet Card Builder"
         },
-        "scenes": [{"nodes": [0]}],
+        "scenes": [{"nodes": [0, 1]}],
         "scene": 0,
         "nodes": [
             {
-                "name": "hips",
-                "translation": [0, 0.6, 0],
-                "children": [1],
+                "name": "mesh_node",
+                "mesh": 0,
                 "skin": 0
             },
             {
-                "name": "spine",
-                "translation": [0, 0.3, 0],
+                "name": "hips",
+                "translation": [0, -0.6, 0],
                 "children": [2],
             },
             {
+                "name": "spine",
+                "translation": [0, 0.7, 0],
+                "children": [3],
+            },
+            {
                 "name": "head",
-                "translation": [0, 0.5, 0],
-                "mesh": 0
+                "translation": [0, 0.6, 0],
             }
         ],
         "meshes": [
@@ -282,20 +306,21 @@ def compile_procedural_glb(face_img: Image.Image) -> bytes:
                     "baseColorTexture": {"index": 0},
                     "roughnessFactor": 0.5,
                     "metallicFactor": 0.1
-                }
+                },
+                "doubleSided": True
             }
         ],
         "textures": [{"source": 0}],
         "images": [{"bufferView": 4, "mimeType": "image/png"}],
         "skins": [
             {
-                "joints": [0, 1, 2],
-                "skeleton": 0
+                "joints": [1, 2, 3],
+                "skeleton": 1
             }
         ],
         "buffers": [{"byteLength": total_bin_len}],
         "bufferViews": [
-            # 0: Vértices (Posición + UV) -> 8 * 4 = 32 bytes de stride
+            # 0: Vértices (Posición + UV) -> 5 * 4 = 20 bytes de stride
             {"buffer": 0, "byteOffset": offset_vert, "byteLength": len(vertex_bytes), "byteStride": 20, "target": 34962},
             # 1: Índices
             {"buffer": 0, "byteOffset": offset_idx, "byteLength": len(index_bytes), "target": 34963},
@@ -308,15 +333,15 @@ def compile_procedural_glb(face_img: Image.Image) -> bytes:
         ],
         "accessors": [
             # 0: POSITION
-            {"bufferView": 0, "byteOffset": 0, "componentType": 5126, "count": 8, "type": "VEC3", "max": [0.25, 0.8, 0.2], "min": [-0.25, -0.6, 0.1]},
+            {"bufferView": 0, "byteOffset": 0, "componentType": 5126, "count": 10, "type": "VEC3", "max": [float(half_width), 1.2, 0.0], "min": [float(-half_width), -0.8, 0.0]},
             # 1: TEXCOORD_0
-            {"bufferView": 0, "byteOffset": 12, "componentType": 5126, "count": 8, "type": "VEC2"},
+            {"bufferView": 0, "byteOffset": 12, "componentType": 5126, "count": 10, "type": "VEC2"},
             # 2: INDICES
-            {"bufferView": 1, "byteOffset": 0, "componentType": 5123, "count": 12, "type": "SCALAR"},
+            {"bufferView": 1, "byteOffset": 0, "componentType": 5123, "count": 24, "type": "SCALAR"},
             # 3: JOINTS_0
-            {"bufferView": 2, "byteOffset": 0, "componentType": 5121, "count": 8, "type": "VEC4"},
+            {"bufferView": 2, "byteOffset": 0, "componentType": 5121, "count": 10, "type": "VEC4"},
             # 4: WEIGHTS_0
-            {"bufferView": 3, "byteOffset": 0, "componentType": 5126, "count": 8, "type": "VEC4"}
+            {"bufferView": 3, "byteOffset": 0, "componentType": 5126, "count": 10, "type": "VEC4"}
         ]
     }
 
@@ -363,15 +388,14 @@ def face_project(payload: Dict[str, Any]) -> Dict[str, Any]:
         s3_download_start = time.perf_counter()
         response = s3_client.get_object(Bucket=BUCKET_NAME, Key=image_key)
         input_data = response["Body"].read()
-        input_image = Image.open(io.BytesIO(input_data)).convert("RGB")
+        input_image = Image.open(io.BytesIO(input_data)).convert("RGBA" if "A" in Image.open(io.BytesIO(input_data)).mode else "RGB")
         s3_download_dur = int((time.perf_counter() - s3_download_start) * 1000)
         
-        # 2. Alinear y recortar rostro
-        face_detect_start = time.perf_counter()
-        face_img = detect_and_align_face(input_image)
-        face_detect_dur = int((time.perf_counter() - face_detect_start) * 1000)
+        # 2. Usar la imagen completa en lugar de recortar/alinear el rostro
+        face_img = input_image
+        face_detect_dur = 0
         
-        # 3. Compilar el GLB rigged procedimental
+        # 3. Compilar el GLB rigged procedimental como plano segmentado (Puppet)
         glb_compile_start = time.perf_counter()
         glb_data = compile_procedural_glb(face_img)
         glb_compile_dur = int((time.perf_counter() - glb_compile_start) * 1000)
