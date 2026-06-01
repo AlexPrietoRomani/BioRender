@@ -34,6 +34,7 @@ interface SessionState {
   setAvatar: (url: string, jobId: string) => void;
   setVideo: (url: string, jobId: string) => void;
   addAvatar: (avatar: AvatarItem) => void;
+  removeAvatar: (id: string) => void;
   resetSession: () => void;
 }
 
@@ -62,6 +63,26 @@ export const useSessionStore = create<SessionState>()(
           avatarsList: [...filtered, avatar],
           activeAvatarUrl: avatar.url,
           avatarJobId: avatar.id
+        };
+      }),
+
+      removeAvatar: (id) => set((state) => {
+        const filtered = state.avatarsList.filter(a => a.id !== id);
+        let newActiveUrl = state.activeAvatarUrl;
+        let newActiveId = state.avatarJobId;
+        if (state.avatarJobId === id) {
+          if (filtered.length > 0) {
+            newActiveUrl = filtered[0].url;
+            newActiveId = filtered[0].id;
+          } else {
+            newActiveUrl = null;
+            newActiveId = null;
+          }
+        }
+        return {
+          avatarsList: filtered,
+          activeAvatarUrl: newActiveUrl,
+          avatarJobId: newActiveId
         };
       }),
 

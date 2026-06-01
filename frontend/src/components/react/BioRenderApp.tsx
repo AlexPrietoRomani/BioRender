@@ -232,6 +232,47 @@ const BioRenderMain: React.FC = () => {
                 <p style={{ margin: '0.25rem 0', color: '#00f07f', fontWeight: 'bold' }}>• COMPILATION: SUCCESSFUL_GLB</p>
               </div>
             )}
+
+            {avatarsList.length > 0 && (
+              <div className="panel-terminal" style={{ fontSize: '0.75rem', color: '#8e8e8e' }}>
+                <h3 style={{ fontSize: '0.8rem', color: '#f5f5f5', marginBottom: '0.5rem', fontFamily: 'var(--font-mono)' }}>
+                  &gt; AVATARES_DISPONIBLES ({avatarsList.length})
+                </h3>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginTop: '0.5rem' }}>
+                  {avatarsList.map((avatar) => (
+                    <div key={avatar.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#0a0a0c', padding: '0.4rem', border: '1px solid #1b1b22' }}>
+                      <span 
+                        style={{ 
+                          color: avatarJobId === avatar.id ? '#00f07f' : '#f5f5f5', 
+                          cursor: 'pointer', 
+                          fontFamily: 'var(--font-mono)',
+                          textDecoration: avatarJobId === avatar.id ? 'underline' : 'none'
+                        }}
+                        onClick={() => setAvatar(avatar.url, avatar.id)}
+                      >
+                        {avatar.name} ({avatar.id.slice(0, 8)}...)
+                      </span>
+                      <button
+                        onClick={() => {
+                          useSessionStore.getState().removeAvatar(avatar.id);
+                        }}
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          color: '#ff3333',
+                          fontFamily: 'var(--font-mono)',
+                          fontSize: '0.7rem',
+                          cursor: 'pointer',
+                          textTransform: 'uppercase'
+                        }}
+                      >
+                        [ ELIMINAR ]
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
           
           <div style={{ flex: 1, display: 'flex' }}>
