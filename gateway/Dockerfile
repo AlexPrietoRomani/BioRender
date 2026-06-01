@@ -10,12 +10,15 @@ RUN cargo build --release
 # ── Ejecución ──
 FROM debian:bookworm-slim
 
-# Instalar libssl3 para TLS, libnss-dns para resolución DNS de Docker y ca-certificates
+# Instalar ca-certificates y libssl3 para TLS saliente
 RUN apt-get update && apt-get install -y \
     ca-certificates \
     libssl3 \
-    libnss-dns \
     && rm -rf /var/lib/apt/lists/*
+
+# Configurar resolución DNS glibc para que resuelva nombres Docker internos
+# debian:bookworm-slim omite /etc/nsswitch.conf, rompiendo getaddrinfo()
+RUN echo 'hosts: files dns' > /etc/nsswitch.conf
 
 COPY --from=builder /usr/src/gateway/target/release/gateway /usr/local/bin/gateway
 

@@ -63,7 +63,14 @@ impl MinioClient {
             .load()
             .await;
 
-        let client = aws_sdk_s3::Client::new(&config);
+        // IMPORTANTE: MinIO requiere path-style (http://host:port/bucket/key).
+        // Sin force_path_style, el SDK AWS intenta virtual-hosted-style resolviendo
+        // el subdominio "bucket.host" que Docker DNS no conoce, causando DNS error.
+        let s3_config = aws_sdk_s3::config::Builder::from(&config)
+            .force_path_style(true)
+            .build();
+
+        let client = aws_sdk_s3::Client::from_conf(s3_config);
 
         // Reintentar la auto-creación del bucket hasta 10 veces para tolerar el arranque de MinIO
         tracing::info!("MinIO: Verificando/Creando bucket '{}'...", bucket);
