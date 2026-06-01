@@ -35,8 +35,8 @@ use std::time::Duration;
 #[derive(Clone)]
 pub struct MinioClient {
     client: aws_sdk_s3::Client,
+    presign_client: aws_sdk_s3::Client,
     bucket: String,
-    public_endpoint: Option<String>,
 }
 
 impl MinioClient {
@@ -48,7 +48,7 @@ impl MinioClient {
         let access_key = env::var("MINIO_ACCESS_KEY").unwrap_or_else(|_| "biorenderadmin".to_string());
         let secret_key = env::var("MINIO_SECRET_KEY").unwrap_or_else(|_| "biorendersecret".to_string());
         let bucket = env::var("MINIO_BUCKET").unwrap_or_else(|_| "biorender-assets".to_string());
-        let public_endpoint = env::var("MINIO_PUBLIC_ENDPOINT").ok();
+        let public_endpoint = env::var("MINIO_PUBLIC_ENDPOINT").unwrap_or_else(|_| "http://localhost:9000".to_string());
 
         let credentials = aws_credential_types::Credentials::new(
             access_key,
@@ -58,21 +58,33 @@ impl MinioClient {
             "Static",
         );
 
-        let config = aws_config::defaults(BehaviorVersion::latest())
-            .credentials_provider(credentials)
+        // 1. Cliente interno para subir y crear buckets
+        let config_internal = aws_config::defaults(BehaviorVersion::latest())
+            .credentials_provider(credentials.clone())
             .endpoint_url(endpoint)
             .region(aws_config::Region::new("us-east-1"))
             .load()
             .await;
 
-        // IMPORTANTE: MinIO requiere path-style (http://host:port/bucket/key).
-        // Sin force_path_style, el SDK AWS intenta virtual-hosted-style resolviendo
-        // el subdominio "bucket.host" que Docker DNS no conoce, causando DNS error.
-        let s3_config = aws_sdk_s3::config::Builder::from(&config)
+        let s3_config_internal = aws_sdk_s3::config::Builder::from(&config_internal)
             .force_path_style(true)
             .build();
 
-        let client = aws_sdk_s3::Client::from_conf(s3_config);
+        let client = aws_sdk_s3::Client::from_conf(s3_config_internal);
+
+        // 2. Cliente para firmas expuestas al navegador externo
+        let config_public = aws_config::defaults(BehaviorVersion::latest())
+            .credentials_provider(credentials)
+            .endpoint_url(public_endpoint)
+            .region(aws_config::Region::new("us-east-1"))
+            .load()
+            .await;
+
+        let s3_config_public = aws_sdk_s3::config::Builder::from(&config_public)
+            .force_path_style(true)
+            .build();
+
+        let presign_client = aws_sdk_s3::Client::from_conf(s3_config_public);
 
         // Reintentar la auto-creación del bucket hasta 10 veces para tolerar el arranque de MinIO
         tracing::info!("MinIO: Verificando/Creando bucket '{}'...", bucket);
@@ -106,7 +118,7 @@ impl MinioClient {
             tracing::error!("MinIO: No se pudo crear/verificar el bucket '{}' después de {} intentos. Las subidas fallaran hasta que MinIO sea accesible.", bucket, max_retries);
         }
 
-        Self { client, bucket, public_endpoint }
+        Self { client, presign_client, bucket }
     }
 
 
@@ -128,7 +140,7 @@ impl MinioClient {
     /// Genera una URL de descarga pre-firmada (Presigned GET) válida por 1 hora.
     pub async fn generate_presigned_get_url(&self, key: &str) -> Result<String> {
         let expires_in = Duration::from_secs(3600); // 1 hora
-        let presigned_req = self.client
+        let presigned_req = self.presign_client
             .get_object()
             .bucket(&self.bucket)
             .key(key)
@@ -136,17 +148,6 @@ impl MinioClient {
             .await
             .context("Error al generar firma criptográfica del objeto S3")?;
         
-        let mut url_str = presigned_req.uri().to_string();
-
-        if let Some(ref pub_ep) = self.public_endpoint {
-            let internal_endpoint = env::var("MINIO_ENDPOINT").unwrap_or_else(|_| "http://biorender-minio:9000".to_string());
-            if url_str.contains(&internal_endpoint) {
-                url_str = url_str.replace(&internal_endpoint, pub_ep);
-            } else {
-                url_str = url_str.replace("http://biorender-minio:9000", pub_ep);
-            }
-        }
-        
-        Ok(url_str)
+        Ok(presigned_req.uri().to_string())
     }
 }
