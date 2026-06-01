@@ -58,6 +58,7 @@ struct CeleryProperties {
     body_encoding: String,
     correlation_id: String,
     delivery_mode: u8,
+    delivery_tag: String,
     delivery_info: DeliveryInfo,
 }
 
@@ -111,6 +112,8 @@ impl RedisQueue {
                 body_encoding: "base64".to_string(),
                 correlation_id: task_id.clone(),
                 delivery_mode: 2,
+                // delivery_tag es requerido por Kombu para identificar cada entrega de mensaje
+                delivery_tag: Uuid::new_v4().to_string(),
                 delivery_info: DeliveryInfo {
                     exchange: "".to_string(),
                     routing_key: queue_name.to_string(),

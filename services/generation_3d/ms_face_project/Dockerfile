@@ -8,8 +8,9 @@ ENV PYTHONUNBUFFERED=1
 WORKDIR /app
 
 # Instalar dependencias del sistema mínimas requeridas por OpenCV y MediaPipe
+# Nota: libgl1-mesa-glx fue renombrado a libgl1 en Debian Trixie (base de python:3.10-slim)
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    libgl1-mesa-glx \
+    libgl1 \
     libglib2.0-0 \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*

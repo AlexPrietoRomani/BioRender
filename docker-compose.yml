@@ -29,6 +29,28 @@ services:
           cpus: '1.0'
           memory: 256M
 
+  # ── Pipeline A Worker: Proyección Facial CPU (Celery) ──
+  worker-generation:
+    container_name: biorender-worker-generation
+    build:
+      context: ./services/generation_3d/ms_face_project
+      dockerfile: Dockerfile
+    environment:
+      - REDIS_URL=redis://biorender-redis:6379
+      - MINIO_ENDPOINT=http://biorender-minio:9000
+      - MINIO_ACCESS_KEY=biorenderadmin
+      - MINIO_SECRET_KEY=biorendersecret
+    depends_on:
+      redis:
+        condition: service_started
+      minio:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 1.5G
+
   # ── Pipeline C: Inferencia en Tiempo Real (FastAPI + Python) ──
   pose-rt:
     container_name: biorender-pose-rt
