@@ -33,6 +33,7 @@ services:
       - POSE_SERVICE_URL=http://biorender-pose-rt:8001
       - REDIS_URL=redis://biorender-redis:6379
       - MINIO_ENDPOINT=http://biorender-minio:9000
+      - MINIO_PUBLIC_ENDPOINT=http://localhost:9000
       - MINIO_ACCESS_KEY=biorenderadmin
       - MINIO_SECRET_KEY=biorendersecret
     depends_on:

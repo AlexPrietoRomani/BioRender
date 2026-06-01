@@ -115,7 +115,7 @@ const BioRenderMain: React.FC = () => {
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', width: '100%' }}>
       
       {/* ── Navegación Cyberpunk por Pestañas ── */}
-      <div style={{ display: 'flex', borderBottom: '2px solid #1b1b22', paddingBottom: '0.25rem', gap: '0.5rem' }}>
+      <div style={{ display: 'flex', borderBottom: '2px solid #1b1b22', paddingBottom: '0.25rem', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
         <button
           className={activeTab === 'realtime' ? 'btn-retro active' : 'btn-retro'}
           onClick={() => setActiveTab('realtime')}
@@ -136,6 +136,24 @@ const BioRenderMain: React.FC = () => {
           style={{ padding: '0.5rem 1rem', fontSize: '0.75rem', borderBottom: activeTab === 'retargeting' ? '2px solid #00f07f' : 'none' }}
         >
           [ RETARGETING & RENDER ]
+        </button>
+        
+        <button
+          className="btn-retro"
+          onClick={() => {
+            useSessionStore.getState().resetSession();
+            window.location.reload();
+          }}
+          style={{ 
+            marginLeft: 'auto', 
+            padding: '0.5rem 1rem', 
+            fontSize: '0.75rem', 
+            color: '#ff3333', 
+            borderColor: '#ff3333',
+            cursor: 'pointer'
+          }}
+        >
+          [ RESETEAR SESIÓN ]
         </button>
       </div>
 

@@ -36,6 +36,7 @@ use std::time::Duration;
 pub struct MinioClient {
     client: aws_sdk_s3::Client,
     bucket: String,
+    public_endpoint: Option<String>,
 }
 
 impl MinioClient {
@@ -47,6 +48,7 @@ impl MinioClient {
         let access_key = env::var("MINIO_ACCESS_KEY").unwrap_or_else(|_| "biorenderadmin".to_string());
         let secret_key = env::var("MINIO_SECRET_KEY").unwrap_or_else(|_| "biorendersecret".to_string());
         let bucket = env::var("MINIO_BUCKET").unwrap_or_else(|_| "biorender-assets".to_string());
+        let public_endpoint = env::var("MINIO_PUBLIC_ENDPOINT").ok();
 
         let credentials = aws_credential_types::Credentials::new(
             access_key,
@@ -104,7 +106,7 @@ impl MinioClient {
             tracing::error!("MinIO: No se pudo crear/verificar el bucket '{}' después de {} intentos. Las subidas fallaran hasta que MinIO sea accesible.", bucket, max_retries);
         }
 
-        Self { client, bucket }
+        Self { client, bucket, public_endpoint }
     }
 
 
@@ -134,6 +136,17 @@ impl MinioClient {
             .await
             .context("Error al generar firma criptográfica del objeto S3")?;
         
-        Ok(presigned_req.uri().to_string())
+        let mut url_str = presigned_req.uri().to_string();
+
+        if let Some(ref pub_ep) = self.public_endpoint {
+            let internal_endpoint = env::var("MINIO_ENDPOINT").unwrap_or_else(|_| "http://biorender-minio:9000".to_string());
+            if url_str.contains(&internal_endpoint) {
+                url_str = url_str.replace(&internal_endpoint, pub_ep);
+            } else {
+                url_str = url_str.replace("http://biorender-minio:9000", pub_ep);
+            }
+        }
+        
+        Ok(url_str)
     }
 }
