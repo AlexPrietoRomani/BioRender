@@ -8,7 +8,6 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
       args:
-        # El navegador del usuario accede al gateway por localhost; se bake en el build de Astro
         PUBLIC_GATEWAY_HTTP_URL: http://localhost:8080
     ports:
       - "4321:80"
@@ -49,7 +48,7 @@ services:
           cpus: '1.0'
           memory: 256M
 
-  # ── Pipeline A Worker: Proyección Facial CPU (Celery) ──
+  # ── Pipeline A Legacy: Proyección Facial CPU (Celery) ──
   worker-generation:
     container_name: biorender-worker-generation
     build:
@@ -90,12 +89,236 @@ services:
         limits:
           cpus: '2.0'
           memory: 1.5G
-        # Para habilitar aceleración GPU en hosts con nvidia-container-toolkit, descomentar este bloque:
+
+  # ═══════════════════════════════════════════════════════════════
+  # FASE 7 — Modernización Pipeline A con Modelos SOTA 2025-2026
+  # ═══════════════════════════════════════════════════════════════
+
+  # ── MS 7.1: Preprocesamiento Robusto (BiRefNet + Normalización) ──
+  ms-preprocess:
+    container_name: biorender-ms-preprocess
+    build:
+      context: ./services/generation_3d/ms_preprocess
+      dockerfile: Dockerfile
+    environment:
+      - REDIS_URL=redis://biorender-redis:6379
+      - MINIO_ENDPOINT=http://biorender-minio:9000
+      - MINIO_ACCESS_KEY=biorenderadmin
+      - MINIO_SECRET_KEY=biorendersecret
+    depends_on:
+      redis:
+        condition: service_started
+      minio:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
+
+  # ── MS 7.2: Auto-Detección Hardware + Clasificador Personaje ──
+  ms-router:
+    container_name: biorender-ms-router
+    build:
+      context: ./services/generation_3d/ms_router
+      dockerfile: Dockerfile
+    environment:
+      - REDIS_URL=redis://biorender-redis:6379
+      - MINIO_ENDPOINT=http://biorender-minio:9000
+      - MINIO_ACCESS_KEY=biorenderadmin
+      - MINIO_SECRET_KEY=biorendersecret
+    depends_on:
+      redis:
+        condition: service_started
+      minio:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
+
+  # ── MS 7.3a: Generación 3D Quality (TripoSG/TRELLIS, GPU ≥16GB) ──
+  ms-generation-triposg:
+    container_name: biorender-ms-generation-triposg
+    build:
+      context: ./services/generation_3d/ms_generation_triposg
+      dockerfile: Dockerfile
+    environment:
+      - REDIS_URL=redis://biorender-redis:6379
+      - MINIO_ENDPOINT=http://biorender-minio:9000
+      - MINIO_ACCESS_KEY=biorenderadmin
+      - MINIO_SECRET_KEY=biorendersecret
+      - GENERATION_MODEL=triposg
+    depends_on:
+      redis:
+        condition: service_started
+      minio:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: '4.0'
+          memory: 16G
         # reservations:
         #   devices:
         #     - driver: nvidia
         #       count: all
         #       capabilities: [gpu]
+
+  # ── MS 7.3b: Generación 3D Balanced (SF3D, GPU 7-16GB) ──
+  ms-generation-sf3d:
+    container_name: biorender-ms-generation-sf3d
+    build:
+      context: ./services/generation_3d/ms_generation_sf3d
+      dockerfile: Dockerfile
+    environment:
+      - REDIS_URL=redis://biorender-redis:6379
+      - MINIO_ENDPOINT=http://biorender-minio:9000
+      - MINIO_ACCESS_KEY=biorenderadmin
+      - MINIO_SECRET_KEY=biorendersecret
+    depends_on:
+      redis:
+        condition: service_started
+      minio:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: '4.0'
+          memory: 8G
+
+  # ── MS 7.3c: Generación 3D CPU (TripoSR, sin GPU) ──
+  ms-generation-triposr-cpu:
+    container_name: biorender-ms-generation-triposr-cpu
+    build:
+      context: ./services/generation_3d/ms_generation_triposr_cpu
+      dockerfile: Dockerfile
+    environment:
+      - REDIS_URL=redis://biorender-redis:6379
+      - MINIO_ENDPOINT=http://biorender-minio:9000
+      - MINIO_ACCESS_KEY=biorenderadmin
+      - MINIO_SECRET_KEY=biorendersecret
+    depends_on:
+      redis:
+        condition: service_started
+      minio:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: '4.0'
+          memory: 4G
+
+  # ── MS 7.3d: Generación 3D Anime (CharacterGen, personajes estilizados) ──
+  ms-generation-chargen:
+    container_name: biorender-ms-generation-chargen
+    build:
+      context: ./services/generation_3d/ms_generation_chargen
+      dockerfile: Dockerfile
+    environment:
+      - REDIS_URL=redis://biorender-redis:6379
+      - MINIO_ENDPOINT=http://biorender-minio:9000
+      - MINIO_ACCESS_KEY=biorenderadmin
+      - MINIO_SECRET_KEY=biorendersecret
+    depends_on:
+      redis:
+        condition: service_started
+      minio:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: '4.0'
+          memory: 12G
+
+  # ── MS 7.4a: Auto-Rigging UniRig (SIGGRAPH 2025) ──
+  ms-rigging-unirig:
+    container_name: biorender-ms-rigging-unirig
+    build:
+      context: ./services/generation_3d/ms_rigging_unirig
+      dockerfile: Dockerfile
+    environment:
+      - REDIS_URL=redis://biorender-redis:6379
+      - MINIO_ENDPOINT=http://biorender-minio:9000
+      - MINIO_ACCESS_KEY=biorenderadmin
+      - MINIO_SECRET_KEY=biorendersecret
+    depends_on:
+      redis:
+        condition: service_started
+      minio:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: '4.0'
+          memory: 8G
+
+  # ── MS 7.4b: Auto-Rigging MIA Fallback (Make-It-Animatable, CVPR 2025) ──
+  ms-rigging-mia:
+    container_name: biorender-ms-rigging-mia
+    build:
+      context: ./services/generation_3d/ms_rigging_mia
+      dockerfile: Dockerfile
+    environment:
+      - REDIS_URL=redis://biorender-redis:6379
+      - MINIO_ENDPOINT=http://biorender-minio:9000
+      - MINIO_ACCESS_KEY=biorenderadmin
+      - MINIO_SECRET_KEY=biorendersecret
+    depends_on:
+      redis:
+        condition: service_started
+      minio:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: '4.0'
+          memory: 8G
+
+  # ── MS 7.5: Validador Automático de Rig ──
+  ms-rig-validator:
+    container_name: biorender-ms-rig-validator
+    build:
+      context: ./services/generation_3d/ms_rig_validator
+      dockerfile: Dockerfile
+    environment:
+      - REDIS_URL=redis://biorender-redis:6379
+      - MINIO_ENDPOINT=http://biorender-minio:9000
+      - MINIO_ACCESS_KEY=biorenderadmin
+      - MINIO_SECRET_KEY=biorendersecret
+    depends_on:
+      redis:
+        condition: service_started
+      minio:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
+
+  # ── MS 7.6: Orquestador Multi-Ruta + Ensamblador GLB ──
+  ms-orchestrator:
+    container_name: biorender-ms-orchestrator
+    build:
+      context: ./services/generation_3d/ms_orchestrator
+      dockerfile: Dockerfile
+    environment:
+      - REDIS_URL=redis://biorender-redis:6379
+      - MINIO_ENDPOINT=http://biorender-minio:9000
+      - MINIO_ACCESS_KEY=biorenderadmin
+      - MINIO_SECRET_KEY=biorendersecret
+    depends_on:
+      redis:
+        condition: service_started
+      minio:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
 
   # ── Message Broker & State Store (Redis) ──
   redis:
@@ -141,4 +364,3 @@ volumes:
     name: biorender_redis_data
   minio_data:
     name: biorender_minio_data
-

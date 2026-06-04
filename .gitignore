@@ -146,6 +146,7 @@ docs/task/
 docs/articles/
 docs/logs/
 !docs/assets/BioRender.png
+!docs/assets/pablo.png
 
 # --- Project Specific ---
 **/plan_a_seguir.md
@@ -153,3 +154,6 @@ docs/logs/
 # --- graphify ---
 /graphify-out/
 .graphifyignore
+
+# --- Playwright MCP Screenshots ---
+playwright-mcp/
